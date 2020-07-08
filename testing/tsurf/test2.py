@@ -8,8 +8,8 @@ import sys
 import numpy
 import meshio
 sys.path.insert(0, '../../src')
-import pdb
-pdb.set_trace()
+# import pdb
+# pdb.set_trace()
 import faultmeshio
 # Files.
 inFile = '../../data/Wellington_Hutt_Valley_1.ts'
