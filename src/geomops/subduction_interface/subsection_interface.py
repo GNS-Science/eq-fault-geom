@@ -66,63 +66,84 @@ profile_spacing = 10000
 start_along = min(along_dists[~np.isnan(z)])
 end_along = max(along_dists[~np.isnan(z)])
 
-# Space profiles evenly along strike
+# Space profiles evenly along strike (distance set by profile spacing variable)
 along_spaced = np.arange(start_along + profile_spacing/2, end_along, profile_spacing)
 
 all_points_ls = []
 
+# Loop through, taking profiles in down-dip direction
 for along in along_spaced:
+    # Point at end of profile at trench (SE) end
     row_end = corner + along * along_overall
 
+    # Boundaries to select projected points
     along_min = along - profile_half_width
     along_max = along + profile_half_width
 
+    # Extract z values and distances across strike
     in_swath = np.logical_and(along_dists >= along_min, along_dists <= along_max)
     swath_across = across_dists[in_swath]
     swath_z = z[in_swath]
 
+    # Remove nans
     across_no_nans = swath_across[~np.isnan(swath_z)]
 
+    # Start and end of profile after nans have been removed
     start_across = min(across_no_nans)
     end_across = max(across_no_nans)
 
+    # Dummy profile distances to create interpolated profile.
+    # Not used for down-dip distances.
+    # every 2 km, for now
     initial_spacing = np.arange(start_across, end_across, profile_half_width)
 
+    # Combine and sort distances along profiles (with z)
     across_vs_z = np.vstack((across_no_nans, swath_z[~np.isnan(swath_z)])).T
     sorted_coords = across_vs_z[across_vs_z[:, 0].argsort()]
 
+    # Interpolate, then turn into shapely linestring
     interp_z = np.interp(initial_spacing, sorted_coords[:, 0], sorted_coords[:, 1])
-
     interp_line = LineString(np.vstack((initial_spacing, interp_z)).T)
 
+    # Interpolate locations of profile centres
     interpolation_distances = np.arange(profile_spacing/2, interp_line.length, profile_spacing)
     interpolated_points = [interp_line.interpolate(distance) for distance in interpolation_distances]
 
+    # Turn coordinates of interpolated points back into arrays
     interpolated_x = np.array([point.x for point in interpolated_points])
     interpolated_z_values = np.array([point.y for point in interpolated_points])
 
+    # Calculate NZTM coordinates of tile crentres
     point_xys = np.array([row_end + across_i * across_vec for across_i in interpolated_x])
     point_xyz = np.vstack((point_xys.T, interpolated_z_values)).T
 
+    # Store in list
     all_points_ls.append(point_xyz)
 
+# List to array
 all_points_array = np.vstack(all_points_ls)
 
+# Loop through tile centres, fitting planes through nearby points
+# Max distance to select points to fit
 search_radius = 1e4
-
+# Holder for tile polygons
 all_tile_ls = []
 
 for centre_point in all_points_array:
+    # Find distances of all points from centre
     difference_vectors = all_xyz - centre_point
     distances = np.linalg.norm(difference_vectors, axis=1)
+    # Select relevant points
     small_cloud = all_xyz[distances < search_radius]
 
-    u_norm_i = fit_plane_svd(small_cloud)
+    # Normal to plane
+    normal_i = fit_plane_svd(small_cloud)
 
-    normal_i = u_norm_i
+    # Make sure normal points up
     if normal_i[-1] < 0:
         normal_i *= -1
 
+    # Calculate along-strike vector (left-hand-rule)
     strike_vector = np.cross(normal_i, np.array([0, 0, -1]))
     strike_vector[-1] = 0
     strike_vector /= np.linalg.norm(strike_vector)
