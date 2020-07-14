@@ -6,6 +6,17 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection, Line3DCollection
 from matplotlib import cm
 
+"""
+Script to turn a gridded GeoTiff (in NZTM format) of the Hikurangi subduction interface into square tiles
+Workflow:
+1. Create across-strike profiles, evenly spaced along the strike along strike of the subduction zone
+2. Interpolate points along the paths defined by profiles, so that tile centres are evenly spaced within 
+   the curved surface of the interface.
+3. Find the local strike and dip of the surface at each tile centre, and create a tile with that strike/dip 
+   and a prescribed width.
+  
+"""
+
 
 def fit_plane_svd(point_cloud: np.ndarray):
     """
@@ -22,6 +33,18 @@ def fit_plane_svd(point_cloud: np.ndarray):
     # unitary normal vector
     u_norm = vh[2, :]
     return u_norm
+
+"""
+Read and pre process data from files, set parameters for meshing
+"""
+
+# Relevant quantities that control tile distribution
+# Swath profile half width; for making (slightly) smoothed profiles/cross-sections through interface.
+profile_half_width = 2000
+# Spacing between down-dip profiles (and therefore tiles) in the along-strike direction
+profile_spacing = 10000
+# Max distance to select points to fit
+search_radius = 1e4
 
 
 # Read in grid from subduction interface
@@ -53,14 +76,13 @@ along_overall = overall_vec / np.linalg.norm(overall_vec)
 # Rotate to give unit vector perpendicular to strike
 across_vec = np.matmul(np.array([[0, -1], [1, 0]]), along_overall)
 
+"""
+Calculate locations of tile centres
+"""
+
 # Calculate distances of coordinates in mesh from corner point
 along_dists = (x_grid - corner[0]) * along_overall[0] + (y_grid - corner[1]) * along_overall[1]
 across_dists = (x_grid - corner[0]) * across_vec[0] + (y_grid - corner[1]) * across_vec[1]
-
-# Swath profile half width; for making (slightly) smoothed profiles/cross-sections through interface.
-profile_half_width = 2000
-# Spacing between down-dip profiles (and therefore tiles) in the along-strike direction
-profile_spacing = 10000
 
 # Find start and end locations along strike (when z values stop being NaNs and start again)
 start_along = min(along_dists[~np.isnan(z)])
@@ -123,9 +145,9 @@ for along in along_spaced:
 # List to array
 all_points_array = np.vstack(all_points_ls)
 
-# Loop through tile centres, fitting planes through nearby points
-# Max distance to select points to fit
-search_radius = 1e4
+"""
+Loop through tile centres, fitting planes through nearby points
+"""
 # Holder for tile polygons
 all_tile_ls = []
 
@@ -162,6 +184,9 @@ for centre_point in all_points_array:
 
     all_tile_ls.append(np.array(poly_ls))
 
+"""
+Write tiles to files
+"""
 all_polygons = [Polygon(array_i) for array_i in all_tile_ls]
 
 outlines = gpd.GeoSeries(all_polygons, crs="epsg:2193")
