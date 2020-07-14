@@ -148,6 +148,7 @@ for centre_point in all_points_array:
     strike_vector[-1] = 0
     strike_vector /= np.linalg.norm(strike_vector)
 
+    # Create down-dip vector
     down_dip_vector = np.cross(normal_i, strike_vector)
     if down_dip_vector[-1] > 0:
         down_dip_vector *= -1
