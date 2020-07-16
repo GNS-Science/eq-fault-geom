@@ -222,8 +222,10 @@ out_alternative_ls = []
 for trace, dip, top_depth, bottom_depth in zip(top_trace_wgs.geometry, dips, top_depths, bottom_depths):
     x0, y0 = trace.coords[0][:-1]
     x1, y1 = trace.coords[1][:-1]
-
-    out_alternative_ls.append([x0, y0, x1, y1, dip, top_depth / -1000, bottom_depth / -1000])
+    if y1 > y0:
+        out_alternative_ls.append([x1, y1, x0, y0, dip, top_depth / -1000, bottom_depth / -1000])
+    else:
+        out_alternative_ls.append([x0, y0, x1, y1, dip, top_depth / -1000, bottom_depth / -1000])
 
 out_alternative_array = np.array(out_alternative_ls)
 np.savetxt("/Users/arh79/PycharmProjects/eq-fault-geom/data/tile_parameters.txt", out_alternative_array, fmt="%.6f",
