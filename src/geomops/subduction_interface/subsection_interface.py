@@ -48,7 +48,7 @@ search_radius = 1e4
 
 
 # Read in grid from subduction interface
-x, y, z = read_tiff("williams_0_005_nztm.tif")
+x, y, z = read_tiff("/Users/arh79/PycharmProjects/rnc2/cfm/subduction_interface/williams_0_005_nztm.tif")
 # Multiply z coordinates by 1000 so that everything is in metres
 z *= 1000
 
@@ -61,7 +61,7 @@ all_xyz = all_xyz_with_nans[~np.isnan(all_xyz_with_nans).any(axis=1)]
 
 # Read shapefile: line that gives overall strike of subduction zone
 # Included so that easy to fiddle with in GIS
-overall_trace = gpd.GeoDataFrame.from_file("overall_trace.shp")
+overall_trace = gpd.GeoDataFrame.from_file("/Users/arh79/PycharmProjects/rnc2/cfm/subduction_interface/overall_trace.shp")
 overall_line = overall_trace.geometry[0]
 # Get SE corner of line
 corner = np.array(overall_line.coords[0])
@@ -150,6 +150,11 @@ Loop through tile centres, fitting planes through nearby points
 """
 # Holder for tile polygons
 all_tile_ls = []
+# Lists to hold info in alternative format
+top_traces = []
+dips = []
+top_depths = []
+bottom_depths = []
 
 for centre_point in all_points_array:
     # Find distances of all points from centre
@@ -176,11 +181,20 @@ for centre_point in all_points_array:
         down_dip_vector *= -1
 
     dip = np.degrees(np.arctan(-1 * down_dip_vector[-1] / np.linalg.norm(down_dip_vector[:-1])))
+    dips.append(dip)
 
     poly_ls = []
     for i, j in zip([1, 1, -1, -1], [1, -1, -1, 1]):
         corner_i = centre_point + (i * strike_vector + j * down_dip_vector) * profile_spacing / 2
         poly_ls.append(corner_i)
+
+    top_depths.append(poly_ls[1][-1])
+    bottom_depths.append(poly_ls[0][-1])
+
+    top_trace = LineString(poly_ls[1:-1])
+    top_traces.append(top_trace)
+
+
 
     all_tile_ls.append(np.array(poly_ls))
 
@@ -199,3 +213,18 @@ all_points = [Point(row) for row in all_points_array]
 centres = gpd.GeoSeries(all_points, crs="epsg:2193")
 centres.to_file("tile_centres.shp")
 all_points_z = np.array([point.z for point in all_points])
+
+# Export in alternative format
+top_trace_gs = gpd.GeoSeries(top_traces, crs="epsg:2193")
+top_trace_wgs = top_trace_gs.to_crs(epsg=4326)
+
+out_alternative_ls = []
+for trace, dip, top_depth, bottom_depth in zip(top_trace_wgs.geometry, dips, top_depths, bottom_depths):
+    x0, y0 = trace.coords[0][:-1]
+    x1, y1 = trace.coords[1][:-1]
+
+    out_alternative_ls.append([x0, y0, x1, y1, dip, top_depth / -1000, bottom_depth / -1000])
+
+out_alternative_array = np.array(out_alternative_ls)
+np.savetxt("/Users/arh79/PycharmProjects/eq-fault-geom/data/tile_parameters.txt", out_alternative_array, fmt="%.6f",
+           delimiter=" ")
