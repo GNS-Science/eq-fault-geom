@@ -227,4 +227,5 @@ for trace, dip, top_depth, bottom_depth in zip(top_trace_wgs.geometry, dips, top
 
 out_alternative_array = np.array(out_alternative_ls)
 np.savetxt("/Users/arh79/PycharmProjects/eq-fault-geom/data/tile_parameters.txt", out_alternative_array, fmt="%.6f",
-           delimiter=" ")
+           delimiter=" ",
+           header="lon1(deg), lat1(deg), lon2(deg), lat2(deg), dip (deg), top_depth (km), bottom_depth (km)")
