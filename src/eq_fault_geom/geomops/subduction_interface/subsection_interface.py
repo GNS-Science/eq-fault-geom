@@ -1,7 +1,10 @@
-from array_operations import read_tiff
+from eq_fault_geom.geomio.array_operations import read_tiff
 import geopandas as gpd
 import numpy as np
 from shapely.geometry import LineString, Polygon, Point
+
+# Location of data directory: TODO need to decide whether data are installed with project
+data_dir = "/Users/arh79/PycharmProjects/eq-fault-geom/data/"
 
 """
 Script to turn a gridded GeoTiff (in NZTM format) of the Hikurangi subduction interface into square tiles
@@ -45,7 +48,7 @@ search_radius = 1e4
 
 
 # Read in grid from subduction interface
-x, y, z = read_tiff("../../../data/subduction/williams_0_005_nztm.tif")
+x, y, z = read_tiff(data_dir + "subduction/williams_0_005_nztm.tif")
 # Multiply z coordinates by 1000 so that everything is in metres
 z *= 1000
 
@@ -58,7 +61,7 @@ all_xyz = all_xyz_with_nans[~np.isnan(all_xyz_with_nans).any(axis=1)]
 
 # Read shapefile: line that gives overall strike of subduction zone
 # Included so that easy to fiddle with in GIS
-overall_trace = gpd.GeoDataFrame.from_file("../../../data/subduction/overall_trace.shp")
+overall_trace = gpd.GeoDataFrame.from_file(data_dir + "subduction/overall_trace.shp")
 overall_line = overall_trace.geometry[0]
 # Get SE corner of line
 corner = np.array(overall_line.coords[0])
@@ -90,8 +93,10 @@ along_spaced = np.arange(start_along + profile_spacing/2, end_along, profile_spa
 
 all_points_ls = []
 
+all_indices = []
+
 # Loop through, taking profiles in down-dip direction
-for along in along_spaced:
+for along_index, along in enumerate(along_spaced):
     # Point at end of profile at trench (SE) end
     row_end = corner + along * along_overall
 
@@ -132,12 +137,16 @@ for along in along_spaced:
     interpolated_x = np.array([point.x for point in interpolated_points])
     interpolated_z_values = np.array([point.y for point in interpolated_points])
 
-    # Calculate NZTM coordinates of tile crentres
+    # Calculate NZTM coordinates of tile centres
     point_xys = np.array([row_end + across_i * across_vec for across_i in interpolated_x])
     point_xyz = np.vstack((point_xys.T, interpolated_z_values)).T
 
+    patch_indices = [(along_index, across_index) for across_index in range(point_xyz.shape[0])]
+
     # Store in list
     all_points_ls.append(point_xyz)
+    all_indices += patch_indices
+
 
 # List to array
 all_points_array = np.vstack(all_points_ls)
@@ -225,8 +234,18 @@ for trace, dip, top_depth, bottom_depth in zip(top_trace_wgs.geometry, dips, top
         out_alternative_ls.append([x0, y0, x1, y1, dip, top_depth / -1000, bottom_depth / -1000])
 
 out_alternative_array = np.array(out_alternative_ls)
+index_array = np.array(all_indices)
+
+# Add "row and column" indices to each patch
+out_array_with_indices = np.hstack((index_array, out_alternative_array))
+centres_with_indices = np.hstack((index_array, all_points_array))
+
+header_str = ("along_strike_index, down_dip_index, lon1(deg), lat1(deg), lon2(deg), "
+              "lat2(deg), dip (deg), top_depth (km), bottom_depth (km)")
+centre_header = "along_strike_index, down_dip_index, cen_x, cen_y, cen_z"
 
 # TODO set to be installable by pip, to avoid these stupid path strings
-np.savetxt("../../../data/tile_parameters.txt", out_alternative_array, fmt="%.6f",
-           delimiter=" ",
-           header="lon1(deg), lat1(deg), lon2(deg), lat2(deg), dip (deg), top_depth (km), bottom_depth (km)")
+np.savetxt(data_dir + "subduction/tile_parameters.txt", out_array_with_indices, fmt="%.6f",
+           delimiter=" ", header=header_str)
+np.savetxt(data_dir + "subduction/tile_centres_nztm.txt", centres_with_indices, fmt="%.6f",
+           delimiter=" ", header=centre_header)
