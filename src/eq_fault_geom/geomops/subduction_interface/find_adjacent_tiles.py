@@ -3,33 +3,12 @@ import pickle
 import os
 import pandas as pd
 
-# Location of data directory: TODO need to decide whether data are installed with project
-# data_dir = "/Users/arh79/PycharmProjects/eq-fault-geom/data/"
-data_dir = os.getcwd() #os.path.expanduser("~/DEV/GNS/eq-fault-geom/data/")
-output_dir = os.getcwd()
 
-
-# Overall strike of subduction interface
-overall_trend = 40.90205712924798 + 180
-
-# tile_centres = np.genfromtxt(data_dir + "subduction/tile_centres_nztm.txt")
-df_tile_centres = pd.read_csv(os.path.join(data_dir, "tile_centres_nztm.csv"), header=0)
-df_tile_params =  pd.read_csv(os.path.join(data_dir, "tile_parameters.csv"), header=0)
-# out_file = data_dir + "subduction/adjacent_tiles.pkl"
-# along_i, down_i, cen_x, cen_y, cen_z = [tile_centres[:, i] for i in range(5)]
-
-# # We'll need to experiment with this value, should be less than 2e4 for single-tile radius
-#search_radius = 2.5e4
-
-# To store indices of nearby patches
-nearby_dic = {}
-nearby_list = []
-
-# Loop through tile centres, finding nearby patches
-for centre in df_tile_centres.values:
-    centre_indices = (int(centre[0]), int(centre[1]))
+def get_adjacent_tiles(centre, pop=True):
+    # centre_indices = (int(centre[0]), int(centre[1]))
     # Coordinates of tile centre
     cen_xyz = centre[2:]
+    # print('cen_xyz', cen_xyz,  centre)
     # Relative positions of all other tile centres
     difference_vectors = df_tile_centres.values[:, 2:] - cen_xyz
     # Distances to other tile centres
@@ -39,8 +18,8 @@ for centre in df_tile_centres.values:
     #nearby_indices = np.where(np.logical_and(distances < search_radius, distances > 1.))[0]
     #nearby = df_tile_centres.values[nearby_indices, :]
     # Relative indicesall other tiles
-    dip_diffs = df_tile_centres.values[:, 0:1] - centre_indices[0]
-    strike_diffs = df_tile_centres.values[:, 1:2] - centre_indices[1]
+    dip_diffs = df_tile_centres.values[:, 0:1] - int(centre[0])
+    strike_diffs = df_tile_centres.values[:, 1:2] - int(centre[1])
     adjacent_tiles   = np.logical_and(
                         abs(dip_diffs) <=1, 
                         abs(strike_diffs) <=1)
@@ -55,28 +34,67 @@ for centre in df_tile_centres.values:
     # Sort adjacent tiles (currently anticlockwise from due east, I think)
     sorted_nearby = nearby[angles.argsort(), :]
     # Get indices of adjacent tiles
-    nearby_along_down_indices = [(int(along), int(down)) for along, down in zip(sorted_nearby[:, 0],
-                                                                             sorted_nearby[:, 1])]
-    nearby_along_down_indices.pop (nearby_along_down_indices.index(centre_indices))
-    # Add to dictionary, with index of "centre" tile as key
-    #nearby_dic[centre_indices] = nearby_along_down_indices
-    try:
-        assert(len(nearby_along_down_indices) <=8)
-        assert(len(nearby_along_down_indices) >=3)
-    except:
-        print(int(centre[0]), int(centre[1]), nearby_along_down_indices)
-    #
-    nearby_list.append((int(centre[0]), int(centre[1]), nearby_along_down_indices))
+    result = [(int(along), int(down)) for along, down in zip(sorted_nearby[:, 0], sorted_nearby[:, 1])]
+    if pop:
+        result.pop(result.index((int(centre[0]), int(centre[1]))))
+    return result
+
+def get_nearby_list(df_tile_centres,  pop=True):
+    nearby_list = []
+    # Loop through tile centres, finding nearby patches
+    for centre in df_tile_centres.values:
+        nearby_along_down_indices = get_adjacent_tiles(centre, pop)
+        # if pop:
+        #     nearby_along_down_indices.pop (nearby_along_down_indices.index((int(centre[0]), int(centre[1]))))
+        # Add to dictionary, with index of "centre" tile as key
+        #nearby_dic[centre_indices] = nearby_along_down_indices
+        try:
+            assert(len(nearby_along_down_indices) <=8)
+            assert(len(nearby_along_down_indices) >=3)
+        except:
+            print(int(centre[0]), int(centre[1]), nearby_along_down_indices)
+        nearby_list.append((int(centre[0]), int(centre[1]), nearby_along_down_indices))
+    return nearby_list
+
+def export_data(nearby_list, df_tile_params):
+    #export dataframe
+    df_nearby = pd.DataFrame(nearby_list)
+    df_nearby.rename(columns={2:'nearby'}, inplace=True)
+
+    df_out = pd.merge(df_tile_params, df_nearby.filter(['nearby']), left_index=True, right_index=True)
+    df_out.to_csv(os.path.join(output_dir, "tile_adjacencies.csv"), index=False)
 
 
-#export dataframe
-df_nearby = pd.DataFrame(nearby_list)
-df_nearby.rename(columns={2:'nearby'}, inplace=True)
+def find_nearest_tile_idx(location_xyz):
+    index = tuple(find_nearest_tile(location_xyz)[:, 0:2][0])
+    return (int(index[0]), int(index[1]))
 
-df_out = pd.merge(df_tile_params, df_nearby.filter(['nearby']), left_index=True, right_index=True)
-df_out.to_csv(os.path.join(output_dir, "tile_adjacencies.csv"), index=False)
+def find_nearest_tile(location_xyz):
+    difference_vectors = df_tile_centres.values[:, 2:] - location_xyz
+    distances = np.linalg.norm(difference_vectors, axis=1)
+    minpos = np.where(distances == np.amin(distances))[0]
+    return df_tile_centres.iloc[minpos, :].values   
+
+if __name__ == '__main__':
+
+    # data_dir = "/Users/arh79/PycharmProjects/eq-fault-geom/data/"
+    data_dir = os.getcwd() #os.path.expanduser("~/DEV/GNS/eq-fault-geom/data/")
+    output_dir = os.getcwd()
+
+    df_tile_centres = pd.read_csv(os.path.join(data_dir, "tile_centres_nztm.csv"), header=0)
+    df_tile_params =  pd.read_csv(os.path.join(data_dir, "tile_parameters.csv"), header=0)
+
+    #nearby_list = get_nearby_list(df_tile_centres)
+    #export_data(nearby_list, df_tile_params)
 
 
+    _411_xyz = (1509514.072933663, 5257251.864946562, -44496.09089646955)
 
-
-
+    _410_xyx = (1516532.2337083307,5251172.102316907,-40860.319477146644)
+    """
+    print (find_nearest_tile_idx(_411_xyz)) #.filter(['along_strike_index', 'down_dip_index']))
+    print  ()
+    print( find_nearest_tile(_411_xyz)[:, :][0])
+    print(get_adjacent_tiles(find_nearest_tile(_411_xyz)[:, :][0]))
+    """
+    print('4,10', get_adjacent_tiles(find_nearest_tile(_410_xyx)[:, :][0]))

@@ -17,7 +17,6 @@ Workflow:
    the curved surface of the interface.
 3. Find the local strike and dip of the surface at each tile centre, and create a tile with that strike/dip 
    and a prescribed width.
-  
 """
 
 
