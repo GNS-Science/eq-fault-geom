@@ -2,10 +2,13 @@ from eq_fault_geom.geomio.array_operations import read_tiff
 import geopandas as gpd
 import numpy as np
 from shapely.geometry import LineString, Polygon, Point
+import os
+import pandas as pd
 
 # Location of data directory: TODO need to decide whether data are installed with project
-data_dir = "/Users/arh79/PycharmProjects/eq-fault-geom/data/"
-
+# data_dir = "/Users/arh79/PycharmProjects/eq-fault-geom/data/"
+data_dir = os.path.expanduser("~/DEV/GNS/eq-fault-geom/data/")
+output_dir = os.getcwd()
 """
 Script to turn a gridded GeoTiff (in NZTM format) of the Hikurangi subduction interface into square tiles
 Workflow:
@@ -48,7 +51,9 @@ search_radius = 1e4
 
 
 # Read in grid from subduction interface
-x, y, z = read_tiff(data_dir + "subduction/williams_0_005_nztm.tif")
+tiff = os.path.join(data_dir, "subduction/williams_0_005_nztm.tif")
+# print(data_dir, tiff, Path(tiff).resolve())
+x, y, z = read_tiff(tiff)
 # Multiply z coordinates by 1000 so that everything is in metres
 z *= 1000
 
@@ -61,7 +66,7 @@ all_xyz = all_xyz_with_nans[~np.isnan(all_xyz_with_nans).any(axis=1)]
 
 # Read shapefile: line that gives overall strike of subduction zone
 # Included so that easy to fiddle with in GIS
-overall_trace = gpd.GeoDataFrame.from_file(data_dir + "subduction/overall_trace.shp")
+overall_trace = gpd.GeoDataFrame.from_file(os.path.join(data_dir, "subduction/overall_trace.shp"))
 overall_line = overall_trace.geometry[0]
 # Get SE corner of line
 corner = np.array(overall_line.coords[0])
@@ -162,7 +167,7 @@ dips = []
 top_depths = []
 bottom_depths = []
 
-for centre_point in all_points_array:
+for centre_point in all_points_array[:5000]:
     # Find distances of all points from centre
     difference_vectors = all_xyz - centre_point
     distances = np.linalg.norm(difference_vectors, axis=1)
@@ -234,18 +239,21 @@ for trace, dip, top_depth, bottom_depth in zip(top_trace_wgs.geometry, dips, top
         out_alternative_ls.append([x0, y0, x1, y1, dip, top_depth / -1000, bottom_depth / -1000])
 
 out_alternative_array = np.array(out_alternative_ls)
-index_array = np.array(all_indices)
+index_array = np.array(all_indices[:5000])
 
-# Add "row and column" indices to each patch
-out_array_with_indices = np.hstack((index_array, out_alternative_array))
-centres_with_indices = np.hstack((index_array, all_points_array))
+#Dataframes provides simpler formatting options
+df_indices  = pd.DataFrame(index_array, columns=["along_strike_index", "down_dip_index"])
+df_tiles    = pd.DataFrame(out_alternative_array, columns=["lon1(deg)", "lat1(deg)", "lon2(deg)", "lat2(deg)", "dip (deg)", "top_depth (km)", "bottom_depth (km)"])
+df_centres  = pd.DataFrame(all_points_array[:5000], columns=["cen_x", "cen_y", "cen_z"])
 
-header_str = ("along_strike_index, down_dip_index, lon1(deg), lat1(deg), lon2(deg), "
-              "lat2(deg), dip (deg), top_depth (km), bottom_depth (km)")
-centre_header = "along_strike_index, down_dip_index, cen_x, cen_y, cen_z"
+df_tiles_out = pd.merge(df_indices, df_tiles, left_index=True, right_index=True)
+df_centres_out = pd.merge(df_indices, df_centres, left_index=True, right_index=True)
 
-# TODO set to be installable by pip, to avoid these stupid path strings
-np.savetxt(data_dir + "subduction/tile_parameters.txt", out_array_with_indices, fmt="%.6f",
-           delimiter=" ", header=header_str)
-np.savetxt(data_dir + "subduction/tile_centres_nztm.txt", centres_with_indices, fmt="%.6f",
-           delimiter=" ", header=centre_header)
+df_tiles_out.to_csv(os.path.join(output_dir, "tile_parameters.csv"), index=False)
+df_centres_out.to_csv(os.path.join(output_dir, "tile_centres_nztm.csv"), index=False)
+
+# # TODO set to be installable by pip, to avoid these stupid path strings
+# np.savetxt(data_dir + "subduction/tile_parameters.txt", out_array_with_indices, fmt="%.6f",
+#            delimiter=" ", header=header_str)
+# np.savetxt(data_dir + "subduction/tile_centres_nztm.txt", centres_with_indices, fmt="%.6f",
+#            delimiter=" ", header=centre_header)
