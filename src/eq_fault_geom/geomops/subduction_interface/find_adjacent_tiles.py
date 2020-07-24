@@ -39,41 +39,76 @@ def get_neighbour_indices(df_tile_centres, centre):
     :param centre: the central tile as a numpy array
     :return: list of adjacent index pairs
     """
-    # centre_indices = (int(centre[0]), int(centre[1]))
+
+    MAX_IDX_OFFSET = 1
     # Coordinates of tile centre
     cen_xyz = centre[2:5]
-    # print('cen_xyz', cen_xyz,  centre)
     # Relative positions of all other tile centres
     # difference_vectors = df_tile_centres.filter(['cen_x','cen_y','cen_z']).values - cen_xyz
     difference_vectors = df_tile_centres.values[:, 2:5] - cen_xyz
-    # Distances to other tile centres
-    # distances = np.linalg.norm(difference_vectors, axis=1)
-    # Select only tile centres below search radius from tile of interest
-    # Minimum distance of 10 m to avoid selecting the tile centre (cannot be adjacent to itself)
-    #nearby_indices = np.where(np.logical_and(distances < search_radius, distances > 1.))[0]
-    #nearby = df_tile_centres.values[nearby_indices, :]
-    # Relative indicesall other tiles
-    dip_diffs = df_tile_centres.values[:, 0:1] - int(centre[0])
-    strike_diffs = df_tile_centres.values[:, 1:2] - int(centre[1])
+
+    # filter tiles with index offset indicesall other tiles
+    dip_offset = df_tile_centres.values[:, 0:1] - int(centre[0])
+    strike_offset = df_tile_centres.values[:, 1:2] - int(centre[1])
     adjacent_tiles   = np.logical_and(
-                        abs(dip_diffs) <=1, 
-                        abs(strike_diffs) <=1)
-    # adjacent_tiles   = abs(dip_diffs) <=1
+                        abs(dip_offset) <= MAX_IDX_OFFSET, 
+                        abs(strike_offset) <= MAX_IDX_OFFSET)
+
+    # adjacent_tiles
     nearby_indices = np.where(adjacent_tiles)[0]
     nearby = df_tile_centres.values[nearby_indices, :]
+    
     # Relative positions of nearby tiles
     nearby_differences = difference_vectors[nearby_indices, :]
-    # print(nearby_indices)
+    
     # Azimuths of vectors to nearby tiles
     angles = np.degrees(np.arctan2(nearby_differences[:, 0], nearby_differences[:, 1]))
     angles[angles < 0] += 360
+
     # Sort adjacent tiles (currently anticlockwise from due east, I think)
     sorted_nearby = nearby[angles.argsort(), :]
+    
     # Get indices of adjacent tiles
     result = [(int(along), int(down)) for along, down in zip(sorted_nearby[:, 0], sorted_nearby[:, 1])]
+    
     #remove the centre tile index
     result.pop(result.index((int(centre[0]), int(centre[1]))))
     return result
+
+
+def get_neighbours_distance(tile_centres, centre):
+
+    # We'll need to experiment with this value, should be less than 2e4 for single-tile radius
+    search_radius = 1.4e4
+    
+    # Coordinates of tile centre
+    cen_xyz = centre[2:]
+    # Relative positions of all other tile centres
+    difference_vectors = tile_centres.values[:, 2:] - cen_xyz
+
+    # Distances to other tile centres
+    distances = np.linalg.norm(difference_vectors, axis=1)
+    # Select only tile centres below search radius from tile of interest
+    # Minimum distance of 10 m to avoid selecting the tile centre (cannot be adjacent to itself)
+    nearby_indices = np.where(np.logical_and(distances < search_radius, distances > 10.))[0]
+    nearby = tile_centres.values[nearby_indices, :]
+
+    # Relative positions of nearby tiles
+    nearby_differences = difference_vectors[nearby_indices, :]
+    
+    # Azimuths of vectors to nearby tiles
+    angles = np.degrees(np.arctan2(nearby_differences[:, 1], nearby_differences[:, 0]))
+    angles[angles < 0] += 360
+
+    # Sort adjacent tiles (currently anticlockwise from due east, I think)
+    sorted_nearby = nearby[angles.argsort(), :]
+
+    # Get indices of adjacent tiles
+    nearby_along_down_indices = [(int(along), int(down)) for along, down in zip(sorted_nearby[:, 0],
+                                                                                sorted_nearby[:, 1])]
+    # centre_indices = (int(centre[0]), int(centre[1]))
+
+    return nearby_along_down_indices    
 
 
 # def find_centre_tile_idx(location_xyz):
