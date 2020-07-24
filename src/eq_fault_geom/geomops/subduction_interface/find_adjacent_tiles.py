@@ -1,29 +1,44 @@
+# import pickle
 import numpy as np
-import pickle
 import os
 import pandas as pd
 import sys
 
-def build_output_list(df_tile_centres,  pop=True):
-    nearby_list = []
-    # Loop through tile centres, finding nearby patches
-    for centre in df_tile_centres.values:
-        nearby_along_down_indices = get_neighbour_indices(df_tile_centres, centre, pop)
-        # if pop:
-        #     nearby_along_down_indices.pop (nearby_along_down_indices.index((int(centre[0]), int(centre[1]))))
-        # Add to dictionary, with index of "centre" tile as key
-        #nearby_dic[centre_indices] = nearby_along_down_indices
-        try:
-            assert(len(nearby_along_down_indices) <=8)
-            assert(len(nearby_along_down_indices) >=2) #in patches, we can have fewer neighbours
-        except:
-            print(int(centre[0]), int(centre[1]), nearby_along_down_indices)
-            raise
-        nearby_list.append((int(centre[0]), int(centre[1]), nearby_along_down_indices))
-    return nearby_list
+''' 
+def _testing():
+    # print(neighbours)
+    #add the tuple index
+    # 
+    print ( df_tile_centres.values[:, 2:5] )
 
+    _411_xyz = (1509514.072933663, 5257251.864946562, -44496.09089646955)
 
-def get_neighbour_indices(df_tile_centres, centre, pop=True):
+    _410_xyx = (1516532.2337083307,5251172.102316907,-40860.319477146644)
+    """
+    print (find_centre_tile_idx(_411_xyz)) #.filter(['along_strike_index', 'down_dip_index']))
+    print  ()
+    print( find_centre_tile(_411_xyz)[:, :][0])
+    print(get_neighbour_indices(find_centre_tile(_411_xyz)[:, :][0]))
+    """
+    centre = find_centre_tile(df_tile_centres, _410_xyx)[:, :][0]
+
+    print('4,10', get_neighbour_indices(df_tile_centres, centre))
+    print()
+
+    neighbours = get_neighbour_tiles(df_tile_centres, centre)
+    # print(neighbours)
+    #print(df_tile_centres)
+    print(build_output_list(neighbours))
+'''
+
+#for expediency the original distance-based approach was replaced with a index-based approach (REVIEW!) 
+def get_neighbour_indices(df_tile_centres, centre):
+    """find indices of neighbouring tiles given a central tile :centre:.
+    
+    :param df_tile_centres: pandas dataframe of all the tile centres (create with subduction_interface)
+    :param centre: the central tile as a numpy array
+    :return: list of adjacent index pairs
+    """
     # centre_indices = (int(centre[0]), int(centre[1]))
     # Coordinates of tile centre
     cen_xyz = centre[2:5]
@@ -56,37 +71,66 @@ def get_neighbour_indices(df_tile_centres, centre, pop=True):
     sorted_nearby = nearby[angles.argsort(), :]
     # Get indices of adjacent tiles
     result = [(int(along), int(down)) for along, down in zip(sorted_nearby[:, 0], sorted_nearby[:, 1])]
-    if pop:
-        result.pop(result.index((int(centre[0]), int(centre[1]))))
+    #remove the centre tile index
+    result.pop(result.index((int(centre[0]), int(centre[1]))))
     return result
 
 
-def find_centre_tile_idx(location_xyz):
-    index = tuple(find_centre_tile(location_xyz)[:, 0:2][0])
-    return (int(index[0]), int(index[1]))
+# def find_centre_tile_idx(location_xyz):
+#     index = tuple(find_centre_tile(location_xyz)[:, 0:2][0])
+#     return (int(index[0]), int(index[1]))
 
 def find_centre_tile(df, location_xyz):
+    """find the centre tile as dataframe, given xyz coords
+
+    :param df_tile_centres: pandas dataframe of tile centres
+    :param centre: the central tile as location tuple (x,y,z)
+
+    :return: tile
+    """
     difference_vectors = df.filter(['cen_x','cen_y','cen_z']).values - location_xyz
     distances = np.linalg.norm(difference_vectors, axis=1)
     minpos = np.where(distances == np.amin(distances))[0]
-    return df.iloc[minpos, :].values   
+    return tuple(df.iloc[minpos, :].values.tolist()[0])
 
-def get_neighbour_tiles(df_tile_centres, centre, pop=True):
-    df = df_tile_centres 
-    indices = get_neighbour_indices(df, centre, pop)
-    # print ("indices", indices)
+def get_neighbour_tiles(df_tile_centres, centre):
+    """build a new dataframe containing tiles and their neighbouring tile indices
+    
+    :param df_tile_centres: pandas dataframe of tile centres
+    :param centre: the central tile as a numpy array
+
+    :return: list
+    """
+
+    #get the indices of neighbor tiles
+    indices = get_neighbour_indices(df_tile_centres, centre)
+    
+    #populate an 'idx' column containing the neighbour indices
     df_tmp = df_tile_centres.copy()
     df_tmp['idx'] = pd.Series(pd.Series([(x[0], x[1]) for x in  df_tile_centres[['along_strike_index', 'down_dip_index']].values]))
-    return df[df_tmp['idx'].isin(indices)]
+    
+    #return just the rows that have indices (could do this with inner join also)
+    return df_tile_centres[df_tmp['idx'].isin(indices)]
 
+def output_list(df_tile_centres):
+    """generator of tile indices, and their neighbouring tile indices
+    
+    :param df_tile_centres: pandas dataframe of tile centres
+    :yield: tuple
+    """
+    # Loop through tile centres dataframe, finding nearby patches
+    for centre in df_tile_centres.values:
+        yield (int(centre[0]), int(centre[1]),                 # idx tuple
+            get_neighbour_indices(df_tile_centres, centre))    # list of neighbour indices
 
-def export(df_tile_centres, df_tile_params):
-    nearby_list = build_output_list(df_tile_centres)
-    export_data(nearby_list, df_tile_params)
+def export(nearby_list, df_tile_params):
+    """merge list with params dataframe, write to stdout in csv format
 
-
-def export_data(nearby_list, df_tile_params):
-    #export dataframe
+    :param nearby_list: 
+    :param df_tile_params: pandas dataframe of tile parameters  
+    
+    :return: None
+    """
     df_nearby = pd.DataFrame(nearby_list).rename(columns={2:'neighbours'})
     #df_nearby, inplace=True)
     cols = list(df_tile_params.columns.values) + ['neighbours']
@@ -104,44 +148,18 @@ if __name__ == '__main__':
 
     arg1 = "FIND"
     arg2 = "1516532.2337,5251172.102,-40860.0"
-    arg2 = "1509514.072933663, 5257251.864946562, -44496.09089646955"
+    # arg2 = "1509514.072933663, 5257251.864946562, -44496.09089646955"
 
     if arg1 == 'ALL':
-        export(df_tile_centres, df_tile_params)
+        export(output_list(df_tile_centres), df_tile_params)
     elif arg1 == 'FIND':
+        #unpack location 
         loc =  tuple([float(x) for x in arg2.split(',')])
-        centre = find_centre_tile(df_tile_centres, loc)[:, :][0]
-        # print(centre)
-        neighbours = get_neighbour_tiles(df_tile_centres, centre, False) #no popping]
-        # print(neighbours)
-        patch_list = build_output_list(neighbours)
-        # for n in patch_list:
-        #     print(n)
-        export_data(patch_list, df_tile_params)
+        centre = find_centre_tile(df_tile_centres, loc)
+
+        neighbours = get_neighbour_tiles(df_tile_centres, centre)
+        
+        patch_list = output_list(neighbours)
+        export(patch_list, df_tile_params)
     
-''' 
-def _testing():
-    # print(neighbours)
-    #add the tuple index
-    # 
-    print ( df_tile_centres.values[:, 2:5] )
 
-    _411_xyz = (1509514.072933663, 5257251.864946562, -44496.09089646955)
-
-    _410_xyx = (1516532.2337083307,5251172.102316907,-40860.319477146644)
-    """
-    print (find_centre_tile_idx(_411_xyz)) #.filter(['along_strike_index', 'down_dip_index']))
-    print  ()
-    print( find_centre_tile(_411_xyz)[:, :][0])
-    print(get_neighbour_indices(find_centre_tile(_411_xyz)[:, :][0]))
-    """
-    centre = find_centre_tile(df_tile_centres, _410_xyx)[:, :][0]
-
-    print('4,10', get_neighbour_indices(df_tile_centres, centre))
-    print()
-
-    neighbours = get_neighbour_tiles(df_tile_centres, centre)
-    # print(neighbours)
-    #print(df_tile_centres)
-    print(build_output_list(neighbours))
-'''
