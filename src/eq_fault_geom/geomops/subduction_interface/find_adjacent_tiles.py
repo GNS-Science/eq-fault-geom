@@ -75,7 +75,7 @@ def get_neighbour_indices(df_tile_centres, centre):
     result.pop(result.index((int(centre[0]), int(centre[1]))))
     return result
 
-
+# slightly modified andys by_distance approach for comparison
 def get_neighbours_distance(tile_centres, centre):
 
     # We'll need to experiment with this value, should be less than 2e4 for single-tile radius
@@ -106,14 +106,8 @@ def get_neighbours_distance(tile_centres, centre):
     # Get indices of adjacent tiles
     nearby_along_down_indices = [(int(along), int(down)) for along, down in zip(sorted_nearby[:, 0],
                                                                                 sorted_nearby[:, 1])]
-    # centre_indices = (int(centre[0]), int(centre[1]))
-
     return nearby_along_down_indices    
 
-
-# def find_centre_tile_idx(location_xyz):
-#     index = tuple(find_centre_tile(location_xyz)[:, 0:2][0])
-#     return (int(index[0]), int(index[1]))
 
 def find_centre_tile(df, location_xyz):
     """find the centre tile as dataframe, given xyz coords
@@ -181,7 +175,7 @@ if __name__ == '__main__':
     df_tile_centres = pd.read_csv(os.path.join(data_dir, "tile_centres_nztm.csv"), header=0)
     df_tile_params =  pd.read_csv(os.path.join(data_dir, "tile_parameters.csv"), header=0)
 
-    arg1 = "FIND"
+    arg1 = "ALL"
     arg2 = "1516532.2337,5251172.102,-40860.0"
     # arg2 = "1509514.072933663, 5257251.864946562, -44496.09089646955"
 
