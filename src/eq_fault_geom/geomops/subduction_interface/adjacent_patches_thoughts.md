@@ -1,0 +1,1 @@
+Thoughts on strategy for finding adjacent patches
