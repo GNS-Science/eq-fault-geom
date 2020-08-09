@@ -20,7 +20,7 @@ from matplotlib import animation
 
 # Location of data directory: TODO need to decide whether data are installed with project
 # data_dir =  os.getcwd()
-data_dir = os.path.expanduser("~/DEV/GNS/opensha/nshm-nz-opensha/data/subduction")
+data_dir = os.path.expanduser("~/DEV/GNS/eq-fault-geom/data/subduction")
 
 # Shapefile containing coordinates of tile outlines (in lat lon)
 outline_file = os.path.join(data_dir, "tile_outlines.zip") 
