@@ -6,8 +6,8 @@ import os
 import pandas as pd
 
 # Location of data directory: TODO need to decide whether data are installed with project
-# data_dir = "/Users/arh79/PycharmProjects/eq-fault-geom/data/"
-data_dir = os.path.expanduser("~/DEV/GNS/eq-fault-geom/data/")
+data_dir = "/Users/arh79/PycharmProjects/eq-fault-geom/data/"
+# data_dir = os.path.expanduser("~/DEV/GNS/eq-fault-geom/data/")
 output_dir = os.getcwd()
 
 """
