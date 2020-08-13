@@ -13,7 +13,7 @@ import sys
 import numpy
 import meshio
 sys.path.insert(0, '../../src')
-import faultmeshio
+from eq_fault_geom import faultmeshio
 # import pdb
 # pdb.set_trace()
 
@@ -27,19 +27,11 @@ def convertFile(inFile, outFile):
     Function to read a TSurf file and output a VTK file.
     """
     # Read TSurf file.
-    mesh = faultmeshio.tsurf(inFile)
+    tsurf = faultmeshio.tsurf(inFile)
 
-    # Convert vertices and cells to numpy arrays.
-    # Cells consists of a dictionary.
-    points = numpy.array(mesh.vertices, dtype=numpy.float64)
-    cells = {"triangle": numpy.array(mesh.triangles, dtype=numpy.int)}
-
-    # Create new mesh.
-    newMesh = meshio.Mesh(points, cells)
-
-    # Write new mesh as VTK file.
+    # Write mesh as VTK file.
     outString = str(outFile)
-    meshio.write(outString, newMesh)
+    meshio.write(outString, tsurf.mesh)
 
     return
     

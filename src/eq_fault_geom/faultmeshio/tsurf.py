@@ -1,4 +1,6 @@
 import six
+import numpy
+import meshio
 
 class tsurf(object):
     default_name = 'Undefined'
@@ -10,22 +12,28 @@ class tsurf(object):
     default_ZPOSITIVE = 'Elevation'
     def __init__(self, *args, **kwargs):
         """
-        Accepts either a single filename or 4 arguments: x, y, z, triangles.
+        Accepts either a single filename or 4 arguments: x, y, z, cells.
         keyword argumets are: "solid_color", "visible" and "name"
 
         If a filename is given, the tsurf is read from the file.
 
         Otherwise:
-        x, y, z are sequences of the x, y, and z coordinates of the vertices.
-        triangles is a sequence of the indicies of the coord arrays making up
+        x, y, z are sequences of the x, y, and z coordinates of the points.
+        cells is a sequence of the indicies of the coord arrays making up
         each triangle in the mesh. E.g. [[0, 1, 2], [2, 1, 3], ...]
 
         I am updating the script to include GOCAD coordinate system info,
         which was not included in the original script.
 
-        At present, vertices and triangles are stored as lists, which
+        At present, points and cells are stored as lists, which
         generally doesn't seem very useful. I think they should be numpy
         arrays.
+
+        Recent changes:
+        Change name of vertices to points, and triangles to cells.
+        Use meshio package to create the mesh, using numpy arrays
+        for points and cells. This makes the function more compatible
+        with the meshio package.
         """
         if len(args) == 1:
             self._read_tsurf(args[0])
@@ -121,26 +129,31 @@ class tsurf(object):
             except KeyError:
                 self.AXIS_UNIT = self.default_AXIS_UNIT
 
-            # Read vertices and triangles
+            # Read points and cells
             if not next(infile).startswith('TFACE'):
                 raise IOError('Only "TFACE" format TSurf files are supported')
-            self.vertices, self.triangles = [], []
+            points, cellArray = [], []
             for line in infile:
                 line = line.strip().split()
                 if line[0] == 'VRTX':
-                    self.vertices.append([float(item) for item in line[2:]])
+                    points.append([float(item) for item in line[2:]])
                 elif line[0] == 'TRGL':
-                    self.triangles.append([int(item)-1 for item in line[1:]])
-        self.x, self.y, self.z = zip(*self.vertices)
+                    cellArray.append([int(item)-1 for item in line[1:]])
+        self.x, self.y, self.z = zip(*points)
+        points = numpy.array(points, dtype=numpy.float64)
+        cellArray = numpy.array(cellArray, dtype=numpy.int)
+        cells = [("triangle", cellArray)]
+        self.mesh = meshio.Mesh(points, cells)
 
 
-    def _init_from_xyz(self, x, y, z, triangles):
-        self.vertices = list(zip(x, y, z))
+    def _init_from_xyz(self, x, y, z, cells):
+        points = numpy.array(list(zip(x, y, z)), dtype=numpy.float64)
         self.x, self.y, self.z = x, y, z
-        self.triangles = triangles
+        cells = cells
         self.solid_color = self.default_solid_color
         self.name = self.default_name
         self.visible = self.default_visible
+        self.mesh = meshio.Mesh(points, cells)
         # Deleting the following default values since I have no idea
         # what they are.
         """
@@ -192,9 +205,11 @@ class tsurf(object):
 
             # Write data...
             outfile.write('TFACE\n')
-            for i, (x, y, z) in enumerate(self.vertices, start=1):
+            for i, (x, y, z) in enumerate(self.mesh.points, start=1):
                 template = '\t'.join(['VRTX {}'] + 3*['{: >9.3f}']) + '\n'
                 outfile.write(template.format(i, x, y, z))
-            for a, b, c in self.triangles:
+            # For now, assume only one set of cells, and that they are all
+            # triangles.
+            for a, b, c in self.mesh.cells[0].data:
                 outfile.write('TRGL {} {} {}\n'.format(a+1, b+1, c+1))
             outfile.write('END\n')
