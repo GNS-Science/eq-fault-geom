@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Very basic test of meshio/tsurf.py.
+Very basic test of faultmeshio/tsurf.py.
 Reads and writes a Tsurf file.
 """
 
@@ -8,7 +8,8 @@ import sys
 sys.path.insert(0, '../../src')
 # import pdb
 # pdb.set_trace()
-import faultmeshio
+from eq_fault_geom import faultmeshio
+
 # Files.
 inFile = '../../data/Wellington_Hutt_Valley_1.ts'
 outFile1 = 'Wellington_Hutt_Valley_1_test1.ts'
@@ -16,20 +17,21 @@ outFile2 = 'Wellington_Hutt_Valley_1_test2.ts'
 outFile3 = 'Wellington_Hutt_Valley_1_test3.ts'
 
 # Read and write sample Tsurf file.
-mesh1 = faultmeshio.tsurf(inFile)
-mesh1.write(outFile1)
+tsurf1 = faultmeshio.tsurf(inFile)
+tsurf1.write(outFile1)
 
 # Create and write new mesh using Tsurf and properties from original mesh.
-x = mesh1.x
-y = mesh1.y
-z = mesh1.z
-triangles = mesh1.triangles
-mesh2 = faultmeshio.tsurf(x, y, z, triangles, name=mesh1.name,
-solid_color=mesh1.solid_color, visible=mesh1.visible, NAME=mesh1.NAME,
-AXIS_NAME=mesh1.AXIS_NAME, AXIS_UNIT=mesh1.AXIS_UNIT, ZPOSITIVE=mesh1.ZPOSITIVE)
+x = tsurf1.x
+y = tsurf1.y
+z = tsurf1.z
+triangles = tsurf1.mesh.cells
+tsurf2 = faultmeshio.tsurf(x, y, z, triangles, name=tsurf1.name,
+solid_color=tsurf1.solid_color, visible=tsurf1.visible, NAME=tsurf1.NAME,
+AXIS_NAME=tsurf1.AXIS_NAME, AXIS_UNIT=tsurf1.AXIS_UNIT, ZPOSITIVE=tsurf1.ZPOSITIVE)
+
 # Write the mesh.
-mesh2.write(outFile2)
+tsurf2.write(outFile2)
 
 # Create and write mesh using default properties.
-mesh3 = faultmeshio.tsurf(x, y, z, triangles)
-mesh3.write(outFile3)
+tsurf3 = faultmeshio.tsurf(x, y, z, triangles)
+tsurf3.write(outFile3)
