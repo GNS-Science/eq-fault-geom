@@ -6,9 +6,10 @@ import os
 import pandas as pd
 
 # Location of data directory: TODO need to decide whether data are installed with project
-# data_dir = "/Users/arh79/PycharmProjects/eq-fault-geom/data/"
-data_dir = os.path.expanduser("~/DEV/GNS/eq-fault-geom/data/")
+data_dir = "/Users/arh79/PycharmProjects/eq-fault-geom/data/"
+# data_dir = os.path.expanduser("~/DEV/GNS/eq-fault-geom/data/")
 output_dir = os.getcwd()
+
 """
 Script to turn a gridded GeoTiff (in NZTM format) of the Hikurangi subduction interface into square tiles
 Workflow:
@@ -213,6 +214,7 @@ Write tiles to files
 """
 all_polygons = [Polygon(array_i) for array_i in all_tile_ls]
 
+
 outlines = gpd.GeoSeries(all_polygons, crs="epsg:2193")
 outlines.to_file("tile_outlines.shp")
 
@@ -240,10 +242,18 @@ for trace, dip, top_depth, bottom_depth in zip(top_trace_wgs.geometry, dips, top
 out_alternative_array = np.array(out_alternative_ls)
 index_array = np.array(all_indices[:5000])
 
-#Dataframes provides simpler formatting options
+
+
+
+# #Dataframes provides simpler formatting options
 df_indices  = pd.DataFrame(index_array, columns=["along_strike_index", "down_dip_index"])
 df_tiles    = pd.DataFrame(out_alternative_array, columns=["lon1(deg)", "lat1(deg)", "lon2(deg)", "lat2(deg)", "dip (deg)", "top_depth (km)", "bottom_depth (km)"])
 df_centres  = pd.DataFrame(all_points_array[:5000], columns=["cen_x", "cen_y", "cen_z"])
+
+#extend alt_out with tile geometry
+df_tiles_xyz = pd.DataFrame(all_polygons, columns=['tile_geometry'])
+df_tiles = pd.merge(df_tiles, df_tiles_xyz, left_index=True, right_index=True)
+
 
 df_tiles_out = pd.merge(df_indices, df_tiles, left_index=True, right_index=True)
 df_centres_out = pd.merge(df_indices, df_centres, left_index=True, right_index=True)
