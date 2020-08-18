@@ -3,5 +3,6 @@ channels:
  - conda-forge
 dependencies:
  - ipyvolume
- - scipy
+ - geopandas
+ - nest_asyncio
  - ipywidgets>=6.0.0
