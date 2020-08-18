@@ -4,5 +4,5 @@ channels:
 dependencies:
  - ipyvolume
  - geopandas
- - nest_asyncio
+ - nest-asyncio
  - ipywidgets>=6.0.0
