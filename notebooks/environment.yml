@@ -1,0 +1,7 @@
+name: ipyvolume
+channels:
+ - conda-forge
+dependencies:
+ - ipyvolume
+ - scipy
+ - ipywidgets>=6.0.0
