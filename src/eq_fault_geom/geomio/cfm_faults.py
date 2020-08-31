@@ -1,19 +1,22 @@
 from typing import Union
-import os
 
-import numpy as np
 import geopandas as gpd
 import pandas as pd
+import numpy as np
 from shapely.geometry import LineString
-
 
 dip_direction_ranges = {"E": (45, 135), "NE": (0, 90), "N": (315, 45), "NW": (270, 360), "SW": (180, 270),
                         "S": (135, 225), "SE": (90, 180), "W": (225, 315)}
 valid_dip_directions = list(dip_direction_ranges.keys()) + [None]
 
+dominant_rake_ranges = {"reverse": (225, 315), "dextral": (325, 45), "sinistral": (135, 315), "normal": (45, 135)}
+secondary_rake_ranges = {"reverse": (180, 360), "dextral": (270, 90), "sinistral": (90, 270), "normal": (0, 180)}
+possible_rake_dirs = ['dextral', 'normal', 'reverse', 'sinistral']
+
 valid_dip_range = [0, 90]
 valid_depth_range = [0, 50]
 valid_rake_range = [0, 360]
+valid_sr_range = [0, 50]
 
 expected_fields = ['Depth_Best', 'Depth_Max', 'Depth_Min', 'Dip_Best',
                    'Dip_Dir', 'Dip_Max', 'Dip_Min', 'FZ_Name',
@@ -46,11 +49,6 @@ def reverse_line(line: LineString):
     y_back = y[-1::-1]
     new_line = LineString([[xi, yi] for xi, yi in zip(x_back, y_back)])
     return new_line
-
-
-
-
-
 
 
 def calculate_dip_direction(line: LineString):
@@ -105,9 +103,41 @@ def root_mean_square(value_array: Union[np.ndarray, list, tuple]):
     return rms
 
 
+class CfmMultiFault:
+    def __init__(self, fault_geodataframe: gpd.GeoDataFrame):
+
+        for field in required_fields:
+            if field not in fault_geodataframe.columns:
+                raise ValueError("Missing required field: {}".format(field))
+        for field in expected_fields:
+            if field not in fault_geodataframe.columns:
+                print("Warning: missing expected field: {}".format(field))
+
+        self._faults = []
+
+        for i, row in fault_geodataframe.iterrows():
+            self.add_fault(row)
+
+    @property
+    def faults(self):
+        return self._faults
+
+    def add_fault(self, series: pd.Series):
+        self.faults.append(CfmFault.from_series(series, parent_multifault=self))
+
+    @property
+    def fault_numbers(self):
+        if self.faults is not None:
+            return [fault.number for fault in self.faults]
+        else:
+            return []
+
+
+
 class CfmFault:
-    def __init__(self, verbose: bool = False):
+    def __init__(self, parent_multifault: CfmMultiFault = None):
         # Attributes usually provided in CFM trace shapefile
+        self._parent = parent_multifault
         self._depth_best, self._depth_min, self._depth_max = (None,) * 3
         self._dip_best, self._dip_min, self._dip_max, self._dip_dir, self._dip_dir_str = (None,) * 5
         self._fz_name, self._name = (None,) * 2
@@ -120,6 +150,7 @@ class CfmFault:
 
         # Attributes required for OpenSHA XML
         self._section_id, self._section_name = (None,) * 2
+        self._dip_sigma, self._rake_sigma, self._sr_sigma = (None,) * 3
 
     # Depths
     @property
@@ -212,6 +243,15 @@ class CfmFault:
                 print("Warning: dip_min higher than either dip_max or dip_best ({})".format(self.name))
         self._dip_max = dip_v
 
+    @property
+    def dip_sigma(self):
+        if self._dip_sigma is not None:
+            return self._dip_sigma
+        elif not any([a is None for a in (self.dip_min, self.dip_max)]):
+            return root_mean_square(np.array([self.dip_min, self.dip_max]))
+        else:
+            raise ValueError("Insufficient data to calculate dip_sigma!")
+
     @dip_dir_str.setter
     def dip_dir_str(self, dip_dir: str):
         assert any([isinstance(dip_dir, str), dip_dir is None])
@@ -220,15 +260,15 @@ class CfmFault:
             self._dip_dir = dip_dir.upper()
         else:
             self._dip_dir = None
-        if self.trace is not None:
+        if self.nztm_trace is not None:
             self.validate_dip_direction()
 
     def validate_dip_direction(self):
-        if any([a is None for a in [self.dip_dir_str, self.trace]]):
+        if any([a is None for a in [self.dip_dir_str, self.nztm_trace]]):
             print("Insufficient information to validate dip direction")
             return
         else:
-            dd_from_trace, line = calculate_dip_direction(self.trace)
+            dd_from_trace, line = calculate_dip_direction(self.nztm_trace)
             min_dd_range, max_dd_range = dip_direction_ranges[self.dip_dir_str]
             if not all([min_dd_range <= dd_from_trace, dd_from_trace <= max_dd_range]):
                 reversed_dd = reverse_bearing(dd_from_trace)
@@ -246,6 +286,16 @@ class CfmFault:
         assert isinstance(dip, (float, int))
         assert valid_dip_range[0] <= dip <= valid_dip_range[1]
         return dip
+
+    # Trace
+    @property
+    def nztm_trace(self):
+        return self._nztm_trace
+
+    @nztm_trace.setter
+    def nztm_trace(self, trace: LineString):
+        assert isinstance(trace, LineString)
+        self._nztm_trace = trace
 
     # Rake and sense of slip
     @property
@@ -278,6 +328,8 @@ class CfmFault:
             if rake_v > self.rake_max:
                 print("Warning: rake_best greater than rake_max ({})".format(self.name))
         self._rake_best = rake_v
+        if self.sense_dom is not None:
+            self.validate_rake_sense()
 
     @rake_max.setter
     def rake_max(self, rake: Union[float, int]):
@@ -303,24 +355,133 @@ class CfmFault:
         assert valid_rake_range[0] <= rake <= valid_rake_range[1]
         return rake
 
-    @staticmethod
+    @sense_dom.setter
+    def sense_dom(self, sense: str):
+        assert isinstance(sense, str)
+        assert sense.lower() in possible_rake_dirs
+        self._sense_dom = sense
 
+    @sense_sec.setter
+    def sense_sec(self, sense: str):
+        assert any([sense is None, isinstance(sense, str)])
+        if sense is not None:
+            assert sense.lower() in possible_rake_dirs
+        self._sense_sec = sense
+        if self.rake_best is not None:
+            self.validate_rake_sense()
+
+    def validate_rake_sense(self):
+        if any([a is None for a in (self.rake_best, self.sense_dom)]):
+            print("{}: Insufficient data to compare rake and slip sense".format(self.name))
+            return
+        else:
+            dominant_range = dominant_rake_ranges[self.sense_dom]
+            if not all([self.rake_best >= dominant_range[0],
+                        self.rake_best <= dominant_range[1]]):
+                print("{}: Supplied rake ({:.2f} deg} differs from dominant slip sense ({})".format(self.name,
+                                                                                                    self.rake_best,
+                                                                                                    self.sense_dom))
+            if self.sense_sec is not None:
+                sec_range = secondary_rake_ranges[self.sense_sec]
+                if not all([self.rake_best >= sec_range[0],
+                            self.rake_best <= sec_range[1]]):
+                    print("{}: Supplied rake ({:.2f} deg} inconsistent with sec slip sense ({})".format(self.name,
+                                                                                                        self.rake_best,
+                                                                                                        self.sense_sec))
+
+    @property
+    def sr_best(self):
+        return self._sr_best
+
+    @property
+    def sr_min(self):
+        return self._sr_min
+
+    @property
+    def sr_max(self):
+        return self._sr_max
+
+    @sr_best.setter
+    def sr_best(self, slip_rate: Union[float, int]):
+        self.validate_sr(slip_rate)
+        if self.sr_min is not None:
+            if slip_rate < self.sr_min:
+                print("Warning: sr_best lower than sr_min ({})".format(self.name))
+        if self.sr_max is not None:
+            if slip_rate > self.sr_max:
+                print("Warning: sr_best greater than sr_max ({})".format(self.name))
+        self._sr_best = slip_rate
+
+    @sr_min.setter
+    def sr_min(self, slip_rate: Union[float, int]):
+        self.validate_sr(slip_rate)
+        if self.sr_best is not None:
+            if slip_rate > self.sr_best:
+                print("Warning: sr_best lower than sr_min ({})".format(self.name))
+        if self.sr_max is not None:
+            if slip_rate > self.sr_max:
+                print("Warning: sr_min greater than sr_max ({})".format(self.name))
+        self._sr_best = slip_rate
+
+    @sr_max.setter
+    def sr_max(self, slip_rate: Union[float, int]):
+        self.validate_sr(slip_rate)
+        if self.sr_min is not None:
+            if slip_rate < self.sr_min:
+                print("Warning: sr_max lower than sr_min ({})".format(self.name))
+        if self.sr_best is not None:
+            if slip_rate < self.sr_best:
+                print("Warning: sr_best greater than sr_max ({})".format(self.name))
+        self._sr_best = slip_rate
+
+    @staticmethod
+    def validate_sr(slip_rate: Union[float, int]):
+        assert isinstance(slip_rate, (float, int))
+        assert valid_sr_range[0] <= slip_rate <= valid_sr_range[1]
+        return slip_rate
+
+    @property
+    def sr_sigma(self):
+        if self._sr_sigma is not None:
+            return self._sr_sigma
+        elif not any([a is None for a in (self.sr_min, self.sr_max)]):
+            return root_mean_square(np.array([self.sr_min, self.sr_max]))
+        else:
+            raise ValueError("Insufficient data to calculate sr_sigma!")
 
     @property
     def name(self):
         return self._name
 
+    @name.setter
+    def name(self, name_str: str):
+        assert isinstance(name_str, str)
+        if not name_str:
+            print("Warning: empty name")
+        self._name = name_str
+
+    @property
+    def number(self):
+        return self._number
+
+    @number.setter
+    def number(self, fault_number):
+        assert isinstance(fault_number, int)
+        if self.parent is not None:
+            if fault_number in self.parent.fault_numbers:
+                print("Duplicate fault number: {:d}".format(fault_number))
+
+    @property
+    def parent(self):
+        return self._parent
+
 
 
 
     @classmethod
-    def from_geoseries(cls, geoseries: gpd.GeoSeries):
-        assert os.path.exists(shapefile)
+    def from_series(cls, series: pd.Series, parent_multifault: CfmMultiFault = None):
 
-
-
-
-
-
-
+        fault = cls(parent_multifault=parent_multifault)
+        fault.name = series["Name"]
+        fault.number = series["Number"]
 
