@@ -1,8 +1,8 @@
-##**eq-fault-geom**
+## eq-fault-geom
 
 Python tools for manipulating fault geometries.
 
-###**Getting started**
+### Getting started
 
 ##### 1. Clone the repository
 
@@ -29,22 +29,18 @@ virtualenv -p python3 eqf_venv
 source eqf_venv/bin/activate
 ````
 ##### 4. Install required packages in virtual environment
-`
 ```
 pip3 install -r requirements.txt
 ````
-
 [PyPA](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/)
 
 ##### 5. Install eq-fault_geom package
-`
 ```
 pip install -e .
 ````
 #####
 
 #### 6. Run the tests
-
 To run all the tests:
 ````
 python setup.py test
