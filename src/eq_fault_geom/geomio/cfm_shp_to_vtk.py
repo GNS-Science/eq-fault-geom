@@ -32,17 +32,17 @@ def calculate_dip_rotation(line: LineString):
     p = np.polyfit(x, y, 1)
     gradient = p[0]
 
-    # Gradient to bearing
-    bearing = np.pi - np.arctan2(gradient, 1)
+    # Gradient to normal
+    normal = np.arctan2(gradient, 1) - 0.5*np.pi
 
     if x[0] > x[-1]:
-        bearing += np.pi
+        normal += np.pi
 
     # Rotation matrix.
-    cosb = np.cos(bearing)
-    sinb = np.sin(bearing)
-    rot_mat = np.array([[cosb, sinb, 0.0],
-                        [-sinb, cosb, 0.0],
+    cosn = np.cos(normal)
+    sinn = np.sin(normal)
+    rot_mat = np.array([[cosn, sinn, 0.0],
+                        [-sinn, cosn, 0.0],
                         [0.0, 0.0, 1.0]], dtype=np.float64)
 
     return rot_mat
