@@ -1,7 +1,7 @@
-##eq-fault-geom
+#**eq-fault-geom**
 Python tools for manipulating fault geometries.
 
-###Getting started
+###**Getting started**
 #####1. Clone the repository
 
 ````
