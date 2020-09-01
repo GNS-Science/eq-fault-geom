@@ -65,4 +65,6 @@ numpy, scipy, pyproj, pytriangle, netCDF4, XML package (not sure which), shapely
 Possible future dependencies:
 h5py, Python XDMF writer
 
+It's better to to keep requirement.txt without combining with setup.py 
+https://caremad.io/posts/2013/07/setup-vs-requirement/
 
