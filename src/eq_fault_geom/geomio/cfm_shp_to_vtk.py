@@ -1,4 +1,5 @@
 from pathlib2 import Path
+import string
 import geopandas as gpd
 import pandas as pd
 from shapely.geometry import LineString
@@ -10,7 +11,7 @@ import meshio
 # Epsilon value.
 eps = 5000.0
 
-# Output directory.
+# Output directory and file suffix.
 output_dir = "../../../data/cfm_shapefile/cfm_vtk"
 vtk_suffix = ".vtk"
 
@@ -18,7 +19,33 @@ vtk_suffix = ".vtk"
 output_path = Path(output_dir)
 output_path.mkdir(parents=True, exist_ok=True)
 
-def calculate_dip_rotation(line: LineString):
+# Which dip and depth values to use.
+dip_use = 'Dip_Best'
+depth_use = 'Depth_Max'
+
+# Dictionary for replacing numbers with letters.
+string_list = string.ascii_uppercase[0:10]
+num_replace_dict = {str(idx + 1):letter for idx, letter in enumerate(string_list)}
+
+# Default elevation for bottom of faults.
+default_elev = -50000.0
+
+# Default length for horizontal faults.
+default_length = 50000.0
+
+# Dictionary of direction vectors.
+pi4 = 0.25*np.pi
+direction_vecs = {"N": np.array([ 0.0,  1.0,  0.0], dtype=np.float64),
+                  "E": np.array([ 1.0,  0.0,  0.0], dtype=np.float64),
+                  "S": np.array([ 0.0, -1.0,  0.0], dtype=np.float64),
+                  "W": np.array([-1.0,  0.0,  0.0], dtype=np.float64),
+                  "NE": np.array([np.cos(pi4),  np.sin(pi4),  0.0], dtype=np.float64),
+                  "SE": np.array([np.cos(-pi4),  np.sin(-pi4),  0.0], dtype=np.float64),
+                  "SW": np.array([np.cos(5.0*pi4),  np.sin(5.0*pi4),  0.0], dtype=np.float64),
+                  "NW": np.array([np.cos(3.0*pi4),  np.sin(3.0*pi4),  0.0], dtype=np.float64)}
+
+
+def calculate_dip_rotation(line: LineString, dip_dir: str):
     """
     Calculate slope of fault trace in NZTM, then add 90 to get dip direction.
     Form 3D rotation matrix from dip direction.
@@ -34,15 +61,19 @@ def calculate_dip_rotation(line: LineString):
 
     # Gradient to normal
     normal = np.arctan2(gradient, 1) - 0.5*np.pi
+    normal_dir = np.array([np.cos(normal), np.sin(normal), 0.0], dtype=np.float64)
 
-    if x[0] > x[-1]:
-        normal += np.pi
+    # Test dip direction against direction vector.
+    if (dip_dir != None):
+        test_dot = np.dot(normal_dir, direction_vecs[dip_dir])
+        if (test_dot < 0.0):
+            normal += np.pi
 
     # Rotation matrix.
     cosn = np.cos(normal)
     sinn = np.sin(normal)
-    rot_mat = np.array([[cosn, sinn, 0.0],
-                        [-sinn, cosn, 0.0],
+    rot_mat = np.array([[cosn, -sinn, 0.0],
+                        [sinn, cosn, 0.0],
                         [0.0, 0.0, 1.0]], dtype=np.float64)
 
     return rot_mat
@@ -53,7 +84,7 @@ def create_mesh_from_trace(fault_info: pd.Series, line: LineString, dip_rotation
     Project along dip vector to get downdip points, then make a mesh using all points.
     """
     # Create dip vector directed East, then rotate to dip direction.
-    dip = -np.radians(fault_info["Dip_Best"])
+    dip = -np.radians(fault_info[dip_use])
     dip_vec_east = np.array([np.cos(dip), 0.0, np.sin(dip)], dtype=np.float64)
     dip_vec = np.dot(dip_rotation, dip_vec_east)
     dip_vec = dip_vec/np.linalg.norm(dip_vec)  # Normalize for good luck.
@@ -67,10 +98,13 @@ def create_mesh_from_trace(fault_info: pd.Series, line: LineString, dip_rotation
     pt = np.column_stack((xt, yt, np.zeros_like(xt)))
 
     # Get distance along dip vector.
-    elev_max = -1000.0*fault_info["Depth_Max"]
+    elev_max = -1000.0*fault_info[depth_use]
     if (np.abs(elev_max) < eps):
-        elev_max = -50000.0
-    dist = elev_max/dip_vec[2]
+        elev_max = default_elev
+    if (dip != 0.0):
+        dist = elev_max/dip_vec[2]
+    else:
+        dist = default_length
 
     # Create points at depth.
     pd = pt + dist*dip_vec
@@ -78,15 +112,15 @@ def create_mesh_from_trace(fault_info: pd.Series, line: LineString, dip_rotation
 
     # Create connectivity.
     num_cells = num_trace_points - 1
-    cellArray = np.zeros((num_cells, 4), dtype=np.int)
+    cell_array = np.zeros((num_cells, 4), dtype=np.int)
     for cell_num in range(num_cells):
-        cellArray[cell_num,0] = cell_num
-        cellArray[cell_num,1] = cell_num + 1
-        cellArray[cell_num,2] = cell_num + num_trace_points + 1
-        cellArray[cell_num,3] = cell_num + num_trace_points
+        cell_array[cell_num,0] = cell_num
+        cell_array[cell_num,1] = cell_num + 1
+        cell_array[cell_num,2] = cell_num + num_trace_points + 1
+        cell_array[cell_num,3] = cell_num + num_trace_points
 
     # Create meshio mesh.
-    cells = [("quad", cellArray)]
+    cells = [("quad", cell_array)]
     mesh = meshio.Mesh(points, cells)
 
     return mesh
@@ -97,11 +131,17 @@ def create_stirling_vtk(fault_info: pd.Series, section_id: int, nztm_geometry: L
     Create 3D Stirling fault file from 2D map info.
     """
     # Get dip rotation matrix and create mesh from surface info.
-    dip_rotation = calculate_dip_rotation(nztm_geometry)
+    dip_dir = fault_info["Dip_Dir"]
+    dip_rotation = calculate_dip_rotation(nztm_geometry, dip_dir)
     mesh = create_mesh_from_trace(fault_info, nztm_geometry, dip_rotation)
 
     # Write mesh.
     file_name = fault_info["Name"].replace(" ", "_")
+    # Note this only works for faults numbered 1-9.
+    if (file_name[-1].isnumeric()):
+        file_list = list(file_name)
+        file_list[-1] = num_replace_dict[file_name[-1]]
+        file_name = "".join(file_list)
     file_path = Path(file_name)
     output_file = Path.joinpath(output_path, file_path).with_suffix(vtk_suffix)
     meshio.write(output_file, mesh, file_format="vtk", binary=False)
