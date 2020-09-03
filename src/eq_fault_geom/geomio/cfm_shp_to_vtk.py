@@ -11,6 +11,10 @@ import meshio
 # Epsilon value.
 eps = 5000.0
 
+# Cell type.
+cell_type = 'triangle'
+# cell_type = 'quad'
+
 # Output directory and file suffix.
 output_dir = "../../../data/cfm_shapefile/cfm_vtk"
 vtk_suffix = ".vtk"
@@ -111,6 +115,21 @@ def create_mesh_from_trace(fault_info: pd.Series, line: LineString, dip_rotation
     points = np.concatenate((pt, pd), axis=0)
 
     # Create connectivity.
+    if (cell_type == "quad"):
+        cells = create_quads(num_trace_points)
+    else:
+        cells = create_triangles(num_trace_points)
+
+    # Create mesh using meshio.
+    mesh = meshio.Mesh(points, cells)
+
+    return mesh
+
+
+def create_quads(num_trace_points):
+    """
+    Create quad cells given the number of points at the surface.
+    """
     num_cells = num_trace_points - 1
     cell_array = np.zeros((num_cells, 4), dtype=np.int)
     for cell_num in range(num_cells):
@@ -119,11 +138,32 @@ def create_mesh_from_trace(fault_info: pd.Series, line: LineString, dip_rotation
         cell_array[cell_num,2] = cell_num + num_trace_points + 1
         cell_array[cell_num,3] = cell_num + num_trace_points
 
-    # Create meshio mesh.
     cells = [("quad", cell_array)]
-    mesh = meshio.Mesh(points, cells)
 
-    return mesh
+    return cells
+
+
+def create_triangles(num_trace_points):
+    """
+    Create quad cells given the number of points at the surface.
+    """
+    num_quads = num_trace_points - 1
+    num_triangles = 2*num_quads
+    cell_array = np.zeros((num_triangles, 3), dtype=np.int)
+    cell_num = 0
+    for quad_num in range(num_quads):
+        cell_array[cell_num,0] = quad_num
+        cell_array[cell_num,1] = quad_num + 1
+        cell_array[cell_num,2] = quad_num + num_trace_points + 1
+        cell_num += 1
+        cell_array[cell_num,0] = quad_num + num_trace_points + 1
+        cell_array[cell_num,1] = quad_num + num_trace_points
+        cell_array[cell_num,2] = quad_num
+        cell_num += 1
+
+    cells = [("triangle", cell_array)]
+
+    return cells
     
     
 def create_stirling_vtk(fault_info: pd.Series, section_id: int, nztm_geometry: LineString):
@@ -136,7 +176,7 @@ def create_stirling_vtk(fault_info: pd.Series, section_id: int, nztm_geometry: L
     mesh = create_mesh_from_trace(fault_info, nztm_geometry, dip_rotation)
 
     # Write mesh.
-    file_name = fault_info["Name"].replace(" ", "_")
+    file_name = fault_info["FZ_Name"].replace(" ", "_")
     # Note this only works for faults numbered 1-9.
     if (file_name[-1].isnumeric()):
         file_list = list(file_name)
@@ -148,26 +188,27 @@ def create_stirling_vtk(fault_info: pd.Series, section_id: int, nztm_geometry: L
 
     return
 
-# Example file; should work on whole dataset too
-shp_file = "../../../data/cfm_shapefile/cfm_lower_n_island.shp"
+if __name__ == '__main__':
+    # Example file; should work on whole dataset too
+    shp_file = "../../../data/cfm_shapefile/cfm_lower_n_island.shp"
+    
+    # read in data
+    shp_df = gpd.GeoDataFrame.from_file(shp_file)
 
-# read in data
-shp_df = gpd.GeoDataFrame.from_file(shp_file)
+    # Sort alphabetically by name
+    sorted_df = shp_df.sort_values("Name")
 
-# Sort alphabetically by name
-sorted_df = shp_df.sort_values("Name")
+    # Reset index to line up with alphabetical sorting
+    sorted_df = sorted_df.reset_index(drop=True)
 
-# Reset index to line up with alphabetical sorting
-sorted_df = sorted_df.reset_index(drop=True)
+    # Reproject traces into lon lat
+    sorted_wgs = sorted_df.to_crs(epsg=4326)
 
-# Reproject traces into lon lat
-sorted_wgs = sorted_df.to_crs(epsg=4326)
+    # Loop through faults, creating a VTK file for each.
+    for i, fault in sorted_wgs.iterrows():
+        # Extract NZTM line for dip direction calculation/could be done in a better way, I'm sure
+        nztm_geometry_i = sorted_df.iloc[i].geometry
 
-# Loop through faults, creating a VTK file for each.
-for i, fault in sorted_wgs.iterrows():
-    # Extract NZTM line for dip direction calculation/could be done in a better way, I'm sure
-    nztm_geometry_i = sorted_df.iloc[i].geometry
-
-    # Create Stirling fault segment and write VTK file.
-    create_stirling_vtk(fault, section_id=i, nztm_geometry=nztm_geometry_i)
+        # Create Stirling fault segment and write VTK file.
+        create_stirling_vtk(fault, section_id=i, nztm_geometry=nztm_geometry_i)
 
