@@ -1,10 +1,9 @@
 ## **eq-fault-geom**
+___________________________
 
 Python tools for manipulating fault geometries.
 
 ### **Getting started**
-=======
-## eq-fault-geom
 
 ##### 1. Clone the repository
 
