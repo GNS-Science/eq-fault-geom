@@ -100,7 +100,7 @@ def bearing_geq(value: Union[int, float], benchmark: Union[int, float], toleranc
 
 def reverse_bearing(bearing: Union[int, float]):
     """
-    180 degrees from supplied beiring
+    180 degrees from supplied bearing
     :param bearing:
     :return:
     """
@@ -522,7 +522,6 @@ class CfmFault:
         while new_rake <= -180.:
             new_rake += 360.
         return new_rake
-
 
     @rake_max.setter
     def rake_max(self, rake: Union[float, int]):
