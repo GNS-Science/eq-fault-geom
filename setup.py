@@ -7,4 +7,6 @@ setup(name='eq-fault-geom',
       author_email='a.howell@gns.cri.nz',  # Very happy to change this
       package_dir={"": "src"},
       packages=find_packages(where="src"),
+      test_suite='nose.collector',
+      tests_require=['nose'],
       )
