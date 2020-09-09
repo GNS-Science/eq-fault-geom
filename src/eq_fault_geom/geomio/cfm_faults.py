@@ -427,11 +427,15 @@ class CfmFault:
         return self._dip_dir
 
     def validate_dip_direction(self):
+        """
+        Compares dip direction string (e.g. NW) with
+        :return:
+        """
         if any([a is None for a in [self.dip_dir_str, self.nztm_trace]]):
             print("Insufficient information to validate dip direction")
             return
         else:
-
+            # Trace and dip direction
             dd_from_trace, line = calculate_dip_direction(self.nztm_trace)
             min_dd_range, max_dd_range = dip_direction_ranges[self.dip_dir_str]
             if not all([min_dd_range <= dd_from_trace, dd_from_trace <= max_dd_range]):
@@ -509,6 +513,16 @@ class CfmFault:
         self._rake_best = rake_v
         if self.sense_dom is not None:
             self.validate_rake_sense()
+
+    @staticmethod
+    def rake_to_opensha(rake: Union[float, int]):
+        new_rake = reverse_bearing(rake)
+        while new_rake > 180:
+            new_rake -= 360.
+        while new_rake <= -180.:
+            new_rake += 360.
+        return new_rake
+
 
     @rake_max.setter
     def rake_max(self, rake: Union[float, int]):
@@ -679,7 +693,7 @@ class CfmFault:
                          "aveLongTermSlipRate": "{:.1f}".format(self.sr_best),
                          "slipRateStDev": "{:.1f}".format(self.sr_sigma),
                          "aveDip": "{:.1f}".format(self.dip_best),
-                         "aveRake": "{:.1f}".format(self.rake_best),
+                         "aveRake": "{:.1f}".format(self.rake_to_opensha(self.rake_best)),
                          "aveUpperDepth": "0.0",
                          "aveLowerDepth": "{:.1f}".format(self.depth_best),
                          "aseismicSlipFactor": "0.0",
