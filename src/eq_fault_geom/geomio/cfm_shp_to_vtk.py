@@ -1,4 +1,4 @@
-from pathlib2 import Path
+from pathlib import Path
 import string
 import geopandas as gpd
 import pandas as pd
@@ -14,14 +14,6 @@ eps = 5000.0
 # Cell type.
 cell_type = 'triangle'
 # cell_type = 'quad'
-
-# Output directory and file suffix.
-output_dir = "../../../data/cfm_shapefile/cfm_vtk"
-vtk_suffix = ".vtk"
-
-# Create output directory if it does not exist.
-output_path = Path(output_dir)
-output_path.mkdir(parents=True, exist_ok=True)
 
 # Which dip and depth values to use.
 dip_use = 'Dip_Best'
@@ -189,6 +181,15 @@ def create_stirling_vtk(fault_info: pd.Series, section_id: int, nztm_geometry: L
     return
 
 if __name__ == '__main__':
+
+    # Output directory and file suffix.
+    output_dir = "../../../data/cfm_shapefile/cfm_vtk"
+    vtk_suffix = ".vtk"
+
+    # Create output directory if it does not exist.
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
     # Example file; should work on whole dataset too
     shp_file = "../../../data/cfm_shapefile/cfm_lower_n_island.shp"
     
