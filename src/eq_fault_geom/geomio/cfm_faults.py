@@ -261,7 +261,7 @@ class CfmMultiFault:
         opensha_element.append(fm_element)
 
         for i, fault in enumerate(self.faults):
-            opensha_element.append(fault.to_xml(section_id=i))
+            fm_element.append(fault.to_xml(section_id=i))
 
         # Awkward way of getting the xml file to be written in a way that's easy to read.
         xml_dom = minidom.parseString(ElemTree.tostring(opensha_element, encoding="UTF-8", xml_declaration=True))
