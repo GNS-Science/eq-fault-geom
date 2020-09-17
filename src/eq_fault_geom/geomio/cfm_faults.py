@@ -19,6 +19,9 @@ dominant_rake_ranges = {"reverse": (225, 315), "dextral": (315, 45), "sinistral"
 secondary_rake_ranges = {"reverse": (180, 360), "dextral": (270, 90), "sinistral": (90, 270), "normal": (0, 180)}
 possible_rake_dirs = ['dextral', 'normal', 'reverse', 'sinistral']
 
+# List of subduction zones to exclude if desired
+subduction_names = ("hikurangi", "puysegur")
+
 valid_dip_range = [0, 90]
 valid_depth_range = [0, 50]
 valid_rake_range = [0, 360]
@@ -248,12 +251,14 @@ class CfmMultiFault:
         multi_fault = cls(fault_geodataframe)
         return multi_fault
 
-    def to_opensha_xml(self):
+    def to_opensha_xml(self, exclude_subduction: bool = True):
         """
         Write out XML in OpenSHA format
+        :param exclude_subduction: Do not include subduction zones from CFM
         :return:
         """
         assert self.faults
+        assert isinstance(exclude_subduction, bool)
         # Base XML element
         opensha_element = ElemTree.Element("OpenSHA")
         # Fault model sub element
@@ -261,7 +266,12 @@ class CfmMultiFault:
         opensha_element.append(fm_element)
 
         for i, fault in enumerate(self.faults):
-            fm_element.append(fault.to_xml(section_id=i))
+            # Identify subduction zone sources to include (only if exclude_subduction is True)
+            exclude_condition = all([exclude_subduction, any([name in fault.name.lower()
+                                                              for name in subduction_names])])
+            # Add XML for fault
+            if not exclude_condition:
+                fm_element.append(fault.to_xml(section_id=i))
 
         # Awkward way of getting the xml file to be written in a way that's easy to read.
         xml_dom = minidom.parseString(ElemTree.tostring(opensha_element, encoding="UTF-8", xml_declaration=True))
@@ -269,14 +279,16 @@ class CfmMultiFault:
 
         return pretty_xml_str
 
-    def to_xml_file(self, filename: str):
+    def to_xml_file(self, filename: str, exclude_subduction: bool = True):
         """
         Write to file
         :param filename:
+        :param exclude_subduction: Do not include subduction zones from CFM
         :return:
         """
+
         with open(filename, "wb") as f:
-            f.write(self.to_opensha_xml())
+            f.write(self.to_opensha_xml(exclude_subduction=exclude_subduction))
 
 
 class CfmFault:
