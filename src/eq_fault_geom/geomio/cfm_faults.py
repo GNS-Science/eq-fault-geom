@@ -2,12 +2,30 @@ from typing import Union
 import xml.etree.ElementTree as ElemTree
 from xml.dom import minidom
 import os
+import warnings
+import logging
 
 import geopandas as gpd
 import pandas as pd
 import numpy as np
 from shapely.geometry import LineString
 from pyproj import Transformer
+
+
+def print_warning(message: str, category=UserWarning, filename='', lineno=-1, file=None, line=None):
+    print(message)
+
+# def save_warning(message: str, category=UserWarning, filename='', lineno=-1, file="errors2.txt", "a", line=None):
+#     if not os.path.exists(file):
+#         fid = open(file, "w")
+#     else:
+#         fid = open(file, "a")
+#     fid.write(message)
+#     fid.write("\n")
+#     fid.close()
+
+
+warnings.showwarning = print_warning
 
 transformer = Transformer.from_crs(2193, 4326, always_xy=True)
 
@@ -207,15 +225,23 @@ class CfmMultiFault:
     Class to hold data for multiple faults, read in from shapefile (and hopefully also tsurfaces)
     """
 
-    def __init__(self, fault_geodataframe: gpd.GeoDataFrame):
+    def __init__(self, fault_geodataframe: gpd.GeoDataFrame, warning_output: str = "print",
+                 warning_file: str = "errors2.txt"):
+        assert isinstance(warning_output, str)
+        warning_output = warning_output.lower()
+        assert warning_output in ("print", "save")
+
+        if warning_output == "print":
+            warnings.showwarning = print_warning
+        else:
+            logging
 
         for field in required_fields:
             if field not in fault_geodataframe.columns:
                 raise ValueError("Missing required field: {}".format(field))
         for field in expected_fields:
             if field not in fault_geodataframe.columns:
-                print("Warning: missing expected field: {}".format(field))
-
+                warnings.warn("Missing expected field: {}".format(field))
         self._faults = []
 
         # Sort alphabetically by name
@@ -242,10 +268,10 @@ class CfmMultiFault:
             return []
 
     @classmethod
-    def from_shp(cls, filename: str):
+    def from_shp(cls, filename: str, warning_output: str = "print"):
         assert os.path.exists(filename)
         fault_geodataframe = gpd.GeoDataFrame.from_file(filename)
-        multi_fault = cls(fault_geodataframe)
+        multi_fault = cls(fault_geodataframe, warning_output=warning_output)
         return multi_fault
 
     def to_opensha_xml(self):
@@ -319,11 +345,11 @@ class CfmFault:
         depth_v = self.validate_depth(depth)
         if self.depth_min is not None:
             if depth_v < self.depth_min:
-                print("{}: depth_best ({:.2f}) lower than depth_min ({:.2f})".format(self.name, depth_v,
+                warnings.warn("{}: depth_best ({:.2f}) lower than depth_min ({:.2f})".format(self.name, depth_v,
                                                                                      self.depth_min))
         if self.depth_max is not None:
             if depth_v > self.depth_max:
-                print("{}: depth_best ({:.2f}) greater than depth_max ({:.2f})".format(self.name, depth_v,
+                warnings.warn("{}: depth_best ({:.2f}) greater than depth_max ({:.2f})".format(self.name, depth_v,
                                                                                        self.depth_best))
         self._depth_best = depth_v
 
@@ -332,7 +358,7 @@ class CfmFault:
         depth_v = self.validate_depth(depth)
         for depth_value in (self.depth_min, self.depth_best):
             if depth_value is not None and depth_v < depth_value:
-                print("Warning: depth_max lower than either depth_min or depth_best ({})".format(self.name))
+                warnings.warn("Warning: depth_max lower than either depth_min or depth_best ({})".format(self.name))
         self._depth_max = depth_v
 
     @depth_min.setter
@@ -340,7 +366,7 @@ class CfmFault:
         depth_v = self.validate_depth(depth)
         for depth_value in (self.depth_max, self.depth_best):
             if depth_value is not None and depth_v > depth_value:
-                print("Warning: depth_min higher than either depth_max or depth_best ({})".format(self.name))
+                warnings.warn("Warning: depth_min higher than either depth_max or depth_best ({})".format(self.name))
         self._depth_min = depth_v
 
     @staticmethod
@@ -372,10 +398,10 @@ class CfmFault:
         dip_v = self.validate_dip(dip)
         if self.dip_min is not None:
             if dip_v < self.dip_min:
-                print("{}: dip_best ({.2f}) lower than dip_min ({.2f})".format(self.name, dip_v, self.dip_min))
+                warnings.warn("{}: dip_best ({.2f}) lower than dip_min ({.2f})".format(self.name, dip_v, self.dip_min))
         if self.dip_max is not None:
             if dip_v > self.dip_max:
-                print("{}: dip_best ({.2f}) greater than dip_max ({.2f})".format(self.name, dip_v, self.dip_max))
+                warnings.warn("{}: dip_best ({.2f}) greater than dip_max ({.2f})".format(self.name, dip_v, self.dip_max))
         self._dip_best = dip_v
 
     @dip_max.setter
@@ -383,7 +409,7 @@ class CfmFault:
         dip_v = self.validate_dip(dip)
         for key, dip_value in zip(["dip_min", "dip_best"], [self.dip_min, self.dip_best]):
             if dip_value is not None and bearing_leq(dip_v, dip_value):
-                print("{}: dip_max ({:.2f}) is lower than {} ({:.2f})".format(self.name, dip_v, key, dip_value))
+                warnings.warn("{}: dip_max ({:.2f}) is lower than {} ({:.2f})".format(self.name, dip_v, key, dip_value))
         self._dip_max = dip_v
 
     @dip_min.setter
@@ -391,7 +417,7 @@ class CfmFault:
         dip_v = self.validate_dip(dip)
         for key, dip_value in zip(["dip_max", "dip_best"], [self.dip_max, self.dip_best]):
             if dip_value is not None and bearing_geq(dip_v, dip_value):
-                print("{}: dip_min ({:.2f}) is higher than {} ({:.2f})".format(self.name, dip_v, key, dip_value))
+                warnings.warn("{}: dip_min ({:.2f}) is higher than {} ({:.2f})".format(self.name, dip_v, key, dip_value))
         self._dip_min = dip_v
 
     @property
@@ -432,7 +458,7 @@ class CfmFault:
         :return:
         """
         if any([a is None for a in [self.dip_dir_str, self.nztm_trace]]):
-            print("Insufficient information to validate dip direction")
+            warnings.warn("Insufficient information to validate dip direction")
             return
         else:
             # Trace and dip direction
@@ -444,7 +470,7 @@ class CfmFault:
                     self._nztm_trace = reverse_line(line)
                     self._dip_dir = reversed_dd
                 else:
-                    print("{}: Supplied trace and dip direction {} are inconsistent: expect either {:.1f} or {:.1f} "
+                    warnings.warn("{}: Supplied trace and dip direction {} are inconsistent: expect either {:.1f} or {:.1f} "
                           "dip azimuth. Please check...".format(self.name, self.dip_dir_str,
                                                                 dd_from_trace, reversed_dd))
                     self._nztm_trace = line
@@ -506,10 +532,10 @@ class CfmFault:
         rake_v = self.validate_rake(rake)
         if self.rake_min is not None:
             if rake_v < self.rake_min:
-                print("{}: rake_best ({.2f}) lower than rake_min ({.2f})".format(self.name, rake_v, self.rake_min))
+                warnings.warn("{}: rake_best ({.2f}) lower than rake_min ({.2f})".format(self.name, rake_v, self.rake_min))
         if self.rake_max is not None:
             if rake_v > self.rake_max:
-                print("{}: rake_best ({.2f}) greater than rake_max ({.2f})".format(self.name, rake_v, self.rake_max))
+                warnings.warn("{}: rake_best ({.2f}) greater than rake_max ({.2f})".format(self.name, rake_v, self.rake_max))
         self._rake_best = rake_v
         if self.sense_dom is not None:
             self.validate_rake_sense()
@@ -528,7 +554,7 @@ class CfmFault:
         rake_v = self.validate_rake(rake)
         for key, rake_value in zip(["rake_min", "rake_best"], [self.rake_min, self.rake_best]):
             if rake_value is not None and bearing_leq(rake_v, rake_value):
-                print("{}: rake_max ({:.2f}) is lower than {} ({:.2f})".format(self.name, rake_v, key, rake_value))
+                warnings.warn("{}: rake_max ({:.2f}) is lower than {} ({:.2f})".format(self.name, rake_v, key, rake_value))
         self._rake_max = rake_v
 
     @rake_min.setter
@@ -536,7 +562,7 @@ class CfmFault:
         rake_v = self.validate_rake(rake)
         for key, rake_value in zip(["rake_max", "rake_best"], [self.rake_max, self.rake_best]):
             if rake_value is not None and bearing_geq(rake_v, rake_value):
-                print("{}: rake_min ({:.2f}) is higher than {} ({:.2f})".format(self.name, rake_v, key, rake_value))
+                warnings.warn("{}: rake_min ({:.2f}) is higher than {} ({:.2f})".format(self.name, rake_v, key, rake_value))
         self._rake_min = rake_v
 
     @staticmethod
@@ -553,7 +579,7 @@ class CfmFault:
     def sense_dom(self, sense: str):
         assert isinstance(sense, str)
         if sense.lower() not in possible_rake_dirs:
-            print("{}: Unexpected sense_dom: {}".format(self.name, sense.lower()))
+            warnings.warn("{}: Unexpected sense_dom: {}".format(self.name, sense.lower()))
         self._sense_dom = sense
 
     @sense_sec.setter
@@ -561,27 +587,27 @@ class CfmFault:
         assert any([sense is None, isinstance(sense, str)])
         if sense is not None:
             if sense.lower() not in possible_rake_dirs:
-                print("{}: Unexpected sense_sec: {}".format(self.name, sense.lower()))
+                warnings.warn("{}: Unexpected sense_sec: {}".format(self.name, sense.lower()))
             if self.rake_best is not None:
                 self.validate_rake_sense()
         self._sense_sec = sense
 
     def validate_rake_sense(self):
         if any([a is None for a in (self.rake_best, self.sense_dom)]):
-            print("{}: Insufficient data to compare rake and slip sense".format(self.name))
+            warnings.warn("{}: Insufficient data to compare rake and slip sense".format(self.name))
             return
         else:
             dominant_range = dominant_rake_ranges[self.sense_dom]
             if not all([bearing_geq(self.rake_best, dominant_range[0]),
                         bearing_leq(self.rake_best, dominant_range[1])]):
-                print("{}: Supplied rake ({:.2f} deg) differs from dominant slip sense ({})".format(self.name,
+                warnings.warn("{}: Supplied rake ({:.2f} deg) differs from dominant slip sense ({})".format(self.name,
                                                                                                     self.rake_best,
                                                                                                     self.sense_dom))
             if self.sense_sec is not None:
                 sec_range = secondary_rake_ranges[self.sense_sec]
                 if not all([bearing_geq(self.rake_best, sec_range[0]),
                             bearing_leq(self.rake_best, sec_range[1])]):
-                    print("{}: Supplied rake ({:.2f} deg) inconsistent with sec slip sense ({})".format(self.name,
+                    warnings.warn("{}: Supplied rake ({:.2f} deg) inconsistent with sec slip sense ({})".format(self.name,
                                                                                                         self.rake_best,
                                                                                                         self.sense_sec))
 
@@ -602,10 +628,10 @@ class CfmFault:
         slip_rate = self.validate_sr(slip_rate)
         if self.sr_min is not None:
             if slip_rate < self.sr_min:
-                print("{}: sr_best ({.2f}) lower than sr_min ({.2f})".format(self.name, slip_rate, self.sr_min))
+                warnings.warn("{}: sr_best ({.2f}) lower than sr_min ({.2f})".format(self.name, slip_rate, self.sr_min))
         if self.sr_max is not None:
             if slip_rate > self.sr_max:
-                print("{}: sr_best ({.2f}) greater than sr_max ({.2f})".format(self.name, slip_rate, self.sr_max))
+                warnings.warn("{}: sr_best ({.2f}) greater than sr_max ({.2f})".format(self.name, slip_rate, self.sr_max))
         self._sr_best = slip_rate
 
     @sr_min.setter
@@ -613,7 +639,7 @@ class CfmFault:
         slip_rate = self.validate_sr(slip_rate)
         for key, sr_value in zip(["sr_max", "sr_best"], [self.sr_max, self.sr_best]):
             if sr_value is not None and bearing_geq(slip_rate, sr_value):
-                print("{}: sr_min ({:.2f}) is higher than {} ({:.2f})".format(self.name, slip_rate, key, sr_value))
+                warnings.warn("{}: sr_min ({:.2f}) is higher than {} ({:.2f})".format(self.name, slip_rate, key, sr_value))
         self._sr_min = slip_rate
 
     @sr_max.setter
@@ -621,7 +647,7 @@ class CfmFault:
         self.validate_sr(slip_rate)
         for key, sr_value in zip(["sr_min", "sr_best"], [self.sr_max, self.sr_best]):
             if sr_value is not None and bearing_leq(slip_rate, sr_value):
-                print("{}: sr_min ({:.2f}) is lower than {} ({:.2f})".format(self.name, slip_rate, key, sr_value))
+                warnings.warn("{}: sr_min ({:.2f}) is lower than {} ({:.2f})".format(self.name, slip_rate, key, sr_value))
         self._sr_max = slip_rate
 
     @staticmethod
@@ -637,8 +663,7 @@ class CfmFault:
         elif not any([a is None for a in (self.sr_min, self.sr_max)]):
             return root_mean_square(np.array([self.sr_min, self.sr_max]))
         else:
-            print("{}: Insufficient data to calculate sr_sigma!".format(self.name))
-            print(self.sr_min, self.sr_best, self.sr_max)
+            warnings.warn("{}: Insufficient data to calculate sr_sigma!".format(self.name))
             return 0
 
     @property
@@ -649,7 +674,7 @@ class CfmFault:
     def name(self, name_str: str):
         assert isinstance(name_str, str)
         if not name_str:
-            print("Warning: empty name")
+            warnings.warn("Warning: empty name")
         self._name = name_str
 
     @property
@@ -661,7 +686,7 @@ class CfmFault:
         assert isinstance(fault_number, int)
         if self.parent is not None:
             if fault_number in self.parent.fault_numbers:
-                print("Duplicate fault number: {:d}".format(fault_number))
+                warnings.warn("Duplicate fault number: {:d}".format(fault_number))
 
     @property
     def parent(self):
