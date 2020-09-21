@@ -158,7 +158,7 @@ def create_triangles(num_trace_points):
     return cells
     
     
-def create_stirling_vtk(fault_info: pd.Series, section_id: int, nztm_geometry: LineString):
+def create_stirling_fault(fault_info: pd.Series, section_id: int, nztm_geometry: LineString):
     """
     Create 3D Stirling fault file from 2D map info.
     """
@@ -167,18 +167,8 @@ def create_stirling_vtk(fault_info: pd.Series, section_id: int, nztm_geometry: L
     dip_rotation = calculate_dip_rotation(nztm_geometry, dip_dir)
     mesh = create_mesh_from_trace(fault_info, nztm_geometry, dip_rotation)
 
-    # Write mesh.
-    file_name = fault_info["FZ_Name"].replace(" ", "_")
-    # Note this only works for faults numbered 1-9.
-    if (file_name[-1].isnumeric()):
-        file_list = list(file_name)
-        file_list[-1] = num_replace_dict[file_name[-1]]
-        file_name = "".join(file_list)
-    file_path = Path(file_name)
-    output_file = Path.joinpath(output_path, file_path).with_suffix(vtk_suffix)
-    meshio.write(output_file, mesh, file_format="vtk", binary=False)
+    return mesh
 
-    return
 
 if __name__ == '__main__':
 
@@ -210,6 +200,22 @@ if __name__ == '__main__':
         # Extract NZTM line for dip direction calculation/could be done in a better way, I'm sure
         nztm_geometry_i = sorted_df.iloc[i].geometry
 
-        # Create Stirling fault segment and write VTK file.
-        create_stirling_vtk(fault, section_id=i, nztm_geometry=nztm_geometry_i)
+        # Create Stirling fault segment.
+        faultmesh = create_stirling_fault(fault, section_id=i, nztm_geometry=nztm_geometry_i)
+
+        # Write mesh.
+        file_name = fault["FZ_Name"].replace(" ", "_")
+
+        """
+        # For now, we no longer replace fault numbers with letters.
+        # Should we also leave spaces in the names?
+        # Note this only works for faults numbered 1-9.
+        if (file_name[-1].isnumeric()):
+            file_list = list(file_name)
+            file_list[-1] = num_replace_dict[file_name[-1]]
+            file_name = "".join(file_list)
+        """
+        file_path = Path(file_name)
+        output_file = Path.joinpath(output_path, file_path).with_suffix(vtk_suffix)
+        meshio.write(output_file, faultmesh, file_format="vtk", binary=False)
 
