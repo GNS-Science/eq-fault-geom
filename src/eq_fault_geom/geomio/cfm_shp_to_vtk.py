@@ -11,10 +11,6 @@ import meshio
 # Epsilon value.
 eps = 5000.0
 
-# Cell type.
-cell_type = 'triangle'
-# cell_type = 'quad'
-
 # Which dip and depth values to use.
 dip_use = 'Dip_Best'
 depth_use = 'Depth_Max'
@@ -41,7 +37,7 @@ direction_vecs = {"N": np.array([ 0.0,  1.0,  0.0], dtype=np.float64),
                   "NW": np.array([np.cos(3.0*pi4),  np.sin(3.0*pi4),  0.0], dtype=np.float64)}
 
 
-def calculate_dip_rotation(line: LineString, dip_dir: str):
+def calculate_dip_rotation(fault_info: pd.Series, dip_dir: str):
     """
     Calculate slope of fault trace in NZTM, then add 90 to get dip direction.
     Form 3D rotation matrix from dip direction.
@@ -49,7 +45,7 @@ def calculate_dip_rotation(line: LineString, dip_dir: str):
     :return:
     """
     # Get coordinates
-    x, y = line.xy
+    x, y = fault_info.geometry.xy
 
     # Calculate gradient of line in 2D
     p = np.polyfit(x, y, 1)
@@ -75,7 +71,7 @@ def calculate_dip_rotation(line: LineString, dip_dir: str):
     return rot_mat
 
 
-def create_mesh_from_trace(fault_info: pd.Series, line: LineString, dip_rotation: np.ndarray):
+def create_mesh_from_trace(fault_info: pd.Series, dip_rotation: np.ndarray, cell_type: str):
     """
     Project along dip vector to get downdip points, then make a mesh using all points.
     """
@@ -86,7 +82,7 @@ def create_mesh_from_trace(fault_info: pd.Series, line: LineString, dip_rotation
     dip_vec = dip_vec/np.linalg.norm(dip_vec)  # Normalize for good luck.
 
     # Get surface trace coordinates. We assume that z=0 at surface.
-    (xl, yl) = line.xy
+    (xl, yl) = fault_info.geometry.xy
     xt = np.array(xl)
     yt = np.array(yl)
     num_trace_points = xt.shape[0]
@@ -118,7 +114,7 @@ def create_mesh_from_trace(fault_info: pd.Series, line: LineString, dip_rotation
     return mesh
 
 
-def create_quads(num_trace_points):
+def create_quads(num_trace_points: int):
     """
     Create quad cells given the number of points at the surface.
     """
@@ -135,7 +131,7 @@ def create_quads(num_trace_points):
     return cells
 
 
-def create_triangles(num_trace_points):
+def create_triangles(num_trace_points: int):
     """
     Create quad cells given the number of points at the surface.
     """
@@ -158,14 +154,14 @@ def create_triangles(num_trace_points):
     return cells
     
     
-def create_stirling_fault(fault_info: pd.Series, section_id: int, nztm_geometry: LineString):
+def create_stirling_fault(fault_info: pd.Series, cell_type: str = "triangle"):
     """
     Create 3D Stirling fault file from 2D map info.
     """
     # Get dip rotation matrix and create mesh from surface info.
     dip_dir = fault_info["Dip_Dir"]
-    dip_rotation = calculate_dip_rotation(nztm_geometry, dip_dir)
-    mesh = create_mesh_from_trace(fault_info, nztm_geometry, dip_rotation)
+    dip_rotation = calculate_dip_rotation(fault_info, dip_dir)
+    mesh = create_mesh_from_trace(fault_info, dip_rotation, cell_type)
 
     return mesh
 
@@ -175,6 +171,10 @@ if __name__ == '__main__':
     # Output directory and file suffix.
     output_dir = "../../../data/cfm_shapefile/cfm_vtk"
     vtk_suffix = ".vtk"
+
+    # Cell type.
+    # cell_type = 'triangle'
+    cell_type = 'quad'
 
     # Create output directory if it does not exist.
     output_path = Path(output_dir)
@@ -192,16 +192,10 @@ if __name__ == '__main__':
     # Reset index to line up with alphabetical sorting
     sorted_df = sorted_df.reset_index(drop=True)
 
-    # Reproject traces into lon lat
-    sorted_wgs = sorted_df.to_crs(epsg=4326)
-
     # Loop through faults, creating a VTK file for each.
-    for i, fault in sorted_wgs.iterrows():
-        # Extract NZTM line for dip direction calculation/could be done in a better way, I'm sure
-        nztm_geometry_i = sorted_df.iloc[i].geometry
-
+    for i, fault in sorted_df.iterrows():
         # Create Stirling fault segment.
-        faultmesh = create_stirling_fault(fault, section_id=i, nztm_geometry=nztm_geometry_i)
+        faultmesh = create_stirling_fault(fault, cell_type=cell_type)
 
         # Write mesh.
         file_name = fault["FZ_Name"].replace(" ", "_")
