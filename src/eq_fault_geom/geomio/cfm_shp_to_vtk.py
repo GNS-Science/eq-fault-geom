@@ -5,6 +5,7 @@ import pandas as pd
 from shapely.geometry import LineString
 import numpy as np
 import meshio
+from typing import Union
 # import pdb
 # pdb.set_trace()
 
@@ -37,13 +38,16 @@ direction_vecs = {"N": np.array([ 0.0,  1.0,  0.0], dtype=np.float64),
                   "NW": np.array([np.cos(3.0*pi4),  np.sin(3.0*pi4),  0.0], dtype=np.float64)}
 
 
-def calculate_dip_rotation(fault_info: pd.Series, dip_dir: str):
+def calculate_dip_rotation(fault_info: pd.Series):
     """
     Calculate slope of fault trace in NZTM, then add 90 to get dip direction.
     Form 3D rotation matrix from dip direction.
-    :param line: Linestring object
+    :param fault_info: Pandas series
     :return:
     """
+    # Get dip direction from fault_info.
+    dip_dir = fault_info["Dip_Dir"]
+
     # Get coordinates
     x, y = fault_info.geometry.xy
 
@@ -71,7 +75,8 @@ def calculate_dip_rotation(fault_info: pd.Series, dip_dir: str):
     return rot_mat
 
 
-def create_mesh_from_trace(fault_info: pd.Series, dip_rotation: np.ndarray, cell_type: str):
+def create_mesh_from_trace(fault_info: pd.Series, dip_rotation: np.ndarray, cell_type: str,
+                           cell_fields: Union[str, list, tuple] = None):
     """
     Project along dip vector to get downdip points, then make a mesh using all points.
     """
@@ -108,10 +113,40 @@ def create_mesh_from_trace(fault_info: pd.Series, dip_rotation: np.ndarray, cell
     else:
         cells = create_triangles(num_trace_points)
 
+    num_cells = cells[0][1].shape[0]
+
+    # Create cell data, if requested.
+    cell_data = create_cell_data(fault_info, num_cells, cell_fields)
+
     # Create mesh using meshio.
-    mesh = meshio.Mesh(points, cells)
+    mesh = meshio.Mesh(points, cells, cell_data=cell_data)
 
     return mesh
+
+
+def create_cell_data(fault_info: pd.Series, num_cells: int, cell_fields: Union[str, list, tuple] = None):
+    """
+    Create cell fields from fault metadata, if requested.
+    """
+    cell_data_dict = None
+    if (cell_fields == None):
+        return cell_data_dict
+
+    if (type(cell_fields) == 'str'):
+        use_fields = [cell_fields]
+    else:
+        use_fields = [i for i in cell_fields]
+
+    num_fields = len(use_fields)
+    cell_data_dict = {}
+    
+    for field in use_fields:
+        val = fault_info[field]
+        val_type = type(val)
+        val_array = val*np.ones(num_cells, dtype=val_type)
+        cell_data_dict[field] = [val_array]
+    
+    return cell_data_dict
 
 
 def create_quads(num_trace_points: int):
@@ -154,14 +189,15 @@ def create_triangles(num_trace_points: int):
     return cells
     
     
-def create_stirling_fault(fault_info: pd.Series, cell_type: str = "triangle"):
+def create_stirling_fault(fault_info: pd.Series, cell_type: str = "triangle",
+                          cell_fields: Union[str, list, tuple] = None):
     """
     Create 3D Stirling fault file from 2D map info.
     """
+
     # Get dip rotation matrix and create mesh from surface info.
-    dip_dir = fault_info["Dip_Dir"]
-    dip_rotation = calculate_dip_rotation(fault_info, dip_dir)
-    mesh = create_mesh_from_trace(fault_info, dip_rotation, cell_type)
+    dip_rotation = calculate_dip_rotation(fault_info)
+    mesh = create_mesh_from_trace(fault_info, dip_rotation, cell_type, cell_fields)
 
     return mesh
 
@@ -171,6 +207,11 @@ if __name__ == '__main__':
     # Output directory and file suffix.
     output_dir = "../../../data/cfm_shapefile/cfm_vtk"
     vtk_suffix = ".vtk"
+
+    # Cell fields (fault metadata) to include with mesh.
+    cell_fields = ['Depth_Best', 'Depth_Max', 'Depth_Min', 'Dip_Best', 'Dip_Max', 'Dip_Min', 'Number',
+                   'Qual_Code', 'Rake_Best', 'Rake_Max', 'Rake_Min', 'SR_Best', 'SR_Max', 'SR_Min']
+
 
     # Cell type.
     # cell_type = 'triangle'
@@ -195,7 +236,7 @@ if __name__ == '__main__':
     # Loop through faults, creating a VTK file for each.
     for i, fault in sorted_df.iterrows():
         # Create Stirling fault segment.
-        faultmesh = create_stirling_fault(fault, cell_type=cell_type)
+        faultmesh = create_stirling_fault(fault, cell_type=cell_type, cell_fields=cell_fields)
 
         # Write mesh.
         file_name = fault["FZ_Name"].replace(" ", "_")
