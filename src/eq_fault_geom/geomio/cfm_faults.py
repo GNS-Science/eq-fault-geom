@@ -144,7 +144,7 @@ def calculate_dip_direction(line: LineString):
     p = np.polyfit(x, y, 1)
     gradient = p[0]
     # Gradient to bearing
-    bearing = 180 - np.degrees(np.arctan2(gradient, 1))
+    bearing = 90 - np.degrees(np.arctan2(gradient, 1))
     bearing_vector = np.array([np.sin(np.radians(bearing)), np.cos(np.radians(bearing))])
 
     # Determine whether line object fits strike convention
@@ -152,23 +152,21 @@ def calculate_dip_direction(line: LineString):
     relative_y = y - y[0]
 
     distances = np.matmul(np.vstack((relative_x, relative_y)).T, bearing_vector)
-    num_pos = len(distances >= 0)
-    num_neg = len(distances < 0)
+    num_pos = np.count_nonzero(distances >= 0)
+    num_neg = np.count_nonzero(distances < 0)
 
     if num_neg > num_pos:
         bearing += 180.
-        line_rh_convention = reverse_line(line)
-    else:
-        line_rh_convention = line
 
+    dip_direction = bearing + 90.
     # Ensure strike is between zero and 360 (bearing)
-    while bearing < 0:
-        bearing += 360.
+    while dip_direction < 0:
+        dip_direction += 360.
 
-    while bearing >= 360.:
-        bearing -= 360.
+    while dip_direction >= 360.:
+        dip_direction -= 360.
 
-    return bearing, line_rh_convention
+    return dip_direction
 
 
 def root_mean_square(value_array: Union[np.ndarray, list, tuple]):
@@ -355,11 +353,12 @@ class CfmFault:
                 print("Warning: depth_min higher than either depth_max or depth_best ({})".format(self.name))
         self._depth_min = depth_v
 
-    @staticmethod
-    def validate_depth(depth: Union[float, int]):
+    def validate_depth(self, depth: Union[float, int]):
         assert isinstance(depth, (float, int))
         depth_positive = depth if depth >= 0 else depth * -1
-        assert valid_depth_range[0] <= depth_positive <= valid_depth_range[1]
+        if not valid_depth_range[0] < depth_positive <= valid_depth_range[1]:
+            print("{}: Supplied (lower) depth should be > {:.1f} and <= {:.1f}".format(self.name, valid_depth_range[0],
+                                                                                       valid_depth_range[1]))
         return depth_positive
 
     # Dips
@@ -427,7 +426,7 @@ class CfmFault:
         else:
             self._dip_dir_str = None
             if self.nztm_trace is not None:
-                dd_from_trace, _ = calculate_dip_direction(self.nztm_trace)
+                dd_from_trace = calculate_dip_direction(self.nztm_trace)
                 self._dip_dir = dd_from_trace
 
     @property
@@ -448,21 +447,19 @@ class CfmFault:
             return
         else:
             # Trace and dip direction
-            dd_from_trace, line = calculate_dip_direction(self.nztm_trace)
+            dd_from_trace = calculate_dip_direction(self.nztm_trace)
             min_dd_range, max_dd_range = dip_direction_ranges[self.dip_dir_str]
             if not all([min_dd_range <= dd_from_trace, dd_from_trace <= max_dd_range]):
                 reversed_dd = reverse_bearing(dd_from_trace)
                 if all([min_dd_range <= reversed_dd, reversed_dd <= max_dd_range]):
-                    self._nztm_trace = reverse_line(line)
+                    self._nztm_trace = reverse_line(self.nztm_trace)
                     self._dip_dir = reversed_dd
                 else:
                     print("{}: Supplied trace and dip direction {} are inconsistent: expect either {:.1f} or {:.1f} "
                           "dip azimuth. Please check...".format(self.name, self.dip_dir_str,
                                                                 dd_from_trace, reversed_dd))
-                    self._nztm_trace = line
                     self._dip_dir = dd_from_trace
             else:
-                self._nztm_trace = line
                 self._dip_dir = dd_from_trace
             return
 
