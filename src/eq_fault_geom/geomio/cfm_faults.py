@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, List
 import xml.etree.ElementTree as ElemTree
 from xml.dom import minidom
 import os
@@ -6,10 +6,11 @@ import os
 import geopandas as gpd
 import pandas as pd
 import numpy as np
-from shapely.geometry import LineString
+from shapely.geometry import LineString, Polygon, MultiPolygon
 from pyproj import Transformer
 
 transformer = Transformer.from_crs(2193, 4326, always_xy=True)
+transform_wgs2nztm = Transformer.from_crs(4326, 2193, always_xy=True)
 
 dip_direction_ranges = {"E": (45, 135), "NE": (0, 90), "N": (315, 45), "NW": (270, 360), "SW": (180, 270),
                         "S": (135, 225), "SE": (90, 180), "W": (225, 315)}
@@ -203,12 +204,59 @@ def fault_trace_xml(geometry: LineString, section_name: str, z: Union[float, int
     return trace_element
 
 
+def polygons_to_shapely_format(supplied_polygons: Union[str, Polygon, MultiPolygon, List[Polygon], np.ndarray]):
+    """
+    Function to turn supplied polygon(s) into list of shapely Polygon objects
+    :param supplied_polygons:
+    :return:
+    """
+    if isinstance(supplied_polygons, str):
+        # Assume file
+        assert os.path.exists(supplied_polygons)
+        if supplied_polygons[-4:] == ".shp":
+            # Read shapefile
+            df = gpd.GeoDataFrame.from_file(supplied_polygons)
+            poly_ls = list(df.geometry)
+            assert all([isinstance(a, Polygon) for a in poly_ls])
+        elif supplied_polygons[-4:] == ".kml":
+            raise NotImplementedError("KML import not implemented")
+
+        elif supplied_polygons[-4:] == ".csv":
+            df = pd.read_csv(supplied_polygons)
+            # Assumes one polygon, with x y coordinates in first columns
+            x = list(df.iloc[:, 0])
+            y = list(df.iloc[:, 1])
+            poly = Polygon([(xi, yi) for xi, yi in zip(x, y)])
+            poly_ls = [poly]
+
+    elif isinstance(supplied_polygons, np.ndarray):
+        # Assumes one polygon, with x y coordinates in first two columns
+        assert supplied_polygons.shape[1] == 2, "Two columns expected"
+        poly = Polygon([(coord[0], coord[1]) for coord in supplied_polygons])
+        poly_ls = [poly]
+
+    elif isinstance(supplied_polygons, Polygon):
+        poly_ls = [supplied_polygons]
+
+    elif isinstance(supplied_polygons, MultiPolygon):
+        poly_ls = list(supplied_polygons)
+
+    elif isinstance(supplied_polygons, list):
+        assert all([isinstance(a, Polygon) for a in supplied_polygons])
+        poly_ls = [supplied_polygons]
+
+    else:
+        raise TypeError("Unexpected input: supply shp, csv, numpy array, shapely polygon, list of polygons or multipol")
+
+    return poly_ls
+
+
 class CfmMultiFault:
     """
     Class to hold data for multiple faults, read in from shapefile (and hopefully also tsurfaces)
     """
 
-    def __init__(self, fault_geodataframe: gpd.GeoDataFrame):
+    def __init__(self, fault_geodataframe: gpd.GeoDataFrame, exclude_regions: List[Polygon] = None):
 
         for field in required_fields:
             if field not in fault_geodataframe.columns:
@@ -216,11 +264,36 @@ class CfmMultiFault:
         for field in expected_fields:
             if field not in fault_geodataframe.columns:
                 print("Warning: missing expected field: {}".format(field))
-
         self._faults = []
 
+        # If appropriate, clip out data that fall within exclude_regions
+        if exclude_regions is not None:
+            assert isinstance(exclude_regions, list)
+            assert all([isinstance(a, Polygon) for a in exclude_regions])
+            exclude_regions_nztm = []
+            # Check that polygons are in NZTM, otherwise convert them
+            for poly in exclude_regions:
+                x, y = poly.exterior.xy
+                if all(np.array(y) < 0):
+                    # Assume in WGS (Lon Lat), convert to NZTM
+                    new_x, new_y = transform_wgs2nztm.transform(np.array(x), np.array(y))
+                    new_poly = Polygon([(xi, yi) for xi, yi in zip(new_x, new_y)])
+                    exclude_regions_nztm.append(new_poly)
+                else:
+                    # Assume NZTM, do nothing
+                    exclude_regions_nztm.append(poly)
+            # Make list of faults outside region
+            trimmed_fault_ls = []
+            for i, row in fault_geodataframe.iterrows():
+                if not any([row.geometry.within(poly) for poly in exclude_regions_nztm]):
+                    trimmed_fault_ls.append(row)
+            trimmed_fault_gdf = gpd.GeoDataFrame(trimmed_fault_ls)
+
+        else:
+            trimmed_fault_gdf = fault_geodataframe
+
         # Sort alphabetically by name
-        sorted_df = fault_geodataframe.sort_values("FZ_Name")
+        sorted_df = trimmed_fault_gdf.sort_values("FZ_Name")
         # Reset index to line up with alphabetical sorting
         sorted_df = sorted_df.reset_index(drop=True)
         for i, row in sorted_df.iterrows():
@@ -243,10 +316,10 @@ class CfmMultiFault:
             return []
 
     @classmethod
-    def from_shp(cls, filename: str):
+    def from_shp(cls, filename: str, exclude_regions: List[Polygon] = None):
         assert os.path.exists(filename)
         fault_geodataframe = gpd.GeoDataFrame.from_file(filename)
-        multi_fault = cls(fault_geodataframe)
+        multi_fault = cls(fault_geodataframe, exclude_regions=exclude_regions)
         return multi_fault
 
     def to_opensha_xml(self, exclude_subduction: bool = True):
