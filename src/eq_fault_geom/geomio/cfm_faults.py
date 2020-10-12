@@ -8,7 +8,14 @@ import pandas as pd
 import numpy as np
 from shapely.geometry import LineString
 from pyproj import Transformer
+#import warnings
 
+import logging
+#logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(filename='cfm_faults.log', format='%(filename)s: %(message)s',
+                   level=logging.DEBUG)
+
+#####good to move these input paramters to seperate JSON file and read it from there
 transformer = Transformer.from_crs(2193, 4326, always_xy=True)
 
 dip_direction_ranges = {"E": (45, 135), "NE": (0, 90), "N": (315, 45), "NW": (270, 360), "SW": (180, 270),
@@ -209,12 +216,8 @@ class CfmMultiFault:
 
     def __init__(self, fault_geodataframe: gpd.GeoDataFrame):
 
-        for field in required_fields:
-            if field not in fault_geodataframe.columns:
-                raise ValueError("Missing required field: {}".format(field))
-        for field in expected_fields:
-            if field not in fault_geodataframe.columns:
-                print("Warning: missing expected field: {}".format(field))
+        self.check_input1(fault_geodataframe)
+        self.check_input2(fault_geodataframe)
 
         self._faults = []
 
@@ -227,12 +230,25 @@ class CfmMultiFault:
 
         self.df = sorted_df
 
+
+    def check_input1(self, fault_geodataframe):
+        for field in required_fields:
+            if field not in fault_geodataframe.columns:
+                raise ValueError("Missing required field: {}".format(field))
+
+    def check_input2(self, fault_geodataframe):
+        for field in expected_fields:
+            if field not in fault_geodataframe.columns:
+                logging.warning("Warning: missing expected field: %s", field)
+
+
     @property
     def faults(self):
         return self._faults
 
     def add_fault(self, series: pd.Series):
-        self.faults.append(CfmFault.from_series(series, parent_multifault=self))
+        cfmFault = CfmFault.from_series(series, parent_multifault=self)
+        self.faults.append(cfmFault)
 
     @property
     def fault_numbers(self):
@@ -264,7 +280,9 @@ class CfmMultiFault:
             opensha_element.append(fault.to_xml(section_id=i))
 
         # Awkward way of getting the xml file to be written in a way that's easy to read.
-        xml_dom = minidom.parseString(ElemTree.tostring(opensha_element, encoding="UTF-8", xml_declaration=True))
+        #elmstr = ElemTree.tostring(opensha_element, encoding="UTF-8", xml_declaration=True)
+        elmstr = ElemTree.tostring(opensha_element, encoding="UTF-8")
+        xml_dom = minidom.parseString(elmstr)
         pretty_xml_str = xml_dom.toprettyxml(indent="  ", encoding="utf-8")
 
         return pretty_xml_str
@@ -276,7 +294,8 @@ class CfmMultiFault:
         :return:
         """
         with open(filename, "wb") as f:
-            f.write(self.to_opensha_xml())
+            opnxml = self.to_opensha_xml()
+            f.write(opnxml)
 
 
 class CfmFault:
@@ -319,12 +338,18 @@ class CfmFault:
         depth_v = self.validate_depth(depth)
         if self.depth_min is not None:
             if depth_v < self.depth_min:
-                print("{}: depth_best ({:.2f}) lower than depth_min ({:.2f})".format(self.name, depth_v,
-                                                                                     self.depth_min))
+                # print("{}: depth_best ({:.2f}) lower than depth_min ({:.2f})".format(self.name, depth_v,
+                #                                                                       self.depth_min))
+                # raise Exception("{}: depth_best ({:.2f}) lower than depth_min ({:.2f})".format(self.name, depth_v,
+                #                                                                      self.depth_min))
+                logging.warning("%s: depth_best %s lower than depth_min %s", self.name, depth_v, self.depth_min)
         if self.depth_max is not None:
             if depth_v > self.depth_max:
-                print("{}: depth_best ({:.2f}) greater than depth_max ({:.2f})".format(self.name, depth_v,
-                                                                                       self.depth_best))
+                # print("{}: depth_best ({:.2f}) greater than depth_max ({:.2f})".format(self.name, depth_v,
+                #                                                                        self.depth_best))
+                # raise Exception("{}: depth_best ({:.2f}) greater than depth_max ({:.2f})".format(self.name, depth_v,
+                #                                                                        self.depth_best))
+                logging.warning("%s: depth_best %s greater than depth_max %s", self.name, depth_v, self.depth_max)
         self._depth_best = depth_v
 
     @depth_max.setter
@@ -332,7 +357,10 @@ class CfmFault:
         depth_v = self.validate_depth(depth)
         for depth_value in (self.depth_min, self.depth_best):
             if depth_value is not None and depth_v < depth_value:
-                print("Warning: depth_max lower than either depth_min or depth_best ({})".format(self.name))
+                #print("Warning: depth_max lower than either depth_min or depth_best ({})".format(self.name))
+                #raise Exception("depth_max lower than either depth_min or depth_best ({})")
+                logging.warning("Depth_max lower than either depth_min or depth_best %s", self.name)
+
         self._depth_max = depth_v
 
     @depth_min.setter
@@ -340,7 +368,9 @@ class CfmFault:
         depth_v = self.validate_depth(depth)
         for depth_value in (self.depth_max, self.depth_best):
             if depth_value is not None and depth_v > depth_value:
-                print("Warning: depth_min higher than either depth_max or depth_best ({})".format(self.name))
+                #print("Warning: depth_min higher than either depth_max or depth_best ({})".format(self.name))
+                #raise Exception("Warning: depth_min higher than either depth_max or depth_best ({})".format(self.name))
+                logging.warning("Depth_min higher than either depth_max or depth_best %s", self.name)
         self._depth_min = depth_v
 
     @staticmethod
