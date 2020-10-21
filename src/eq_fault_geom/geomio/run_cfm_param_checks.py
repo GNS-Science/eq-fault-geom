@@ -23,7 +23,7 @@ matt_array = np.array([[-36.17, 177.25],
                        [-36.17, 177.25]])
 
 # Polygon requires lon lat (rather than lat lon)
-matt_poly = [Polygon([(row[1], row[0]) for row in matt_array])]
+matt_poly = Polygon([(row[1], row[0]) for row in matt_array])
 poly_ls.append(matt_poly)
 
 # # Write to shapefile for visualization in GIS
