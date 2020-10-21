@@ -336,13 +336,15 @@ class CfmMultiFault:
         fm_element = ElemTree.Element("FaultModel")
         opensha_element.append(fm_element)
 
-        for i, fault in enumerate(self.faults):
+        i = 0
+        for fault in self.faults:
             # Identify subduction zone sources to include (only if exclude_subduction is True)
             exclude_condition = all([exclude_subduction, any([name in fault.name.lower()
                                                               for name in subduction_names])])
             # Add XML for fault
             if not exclude_condition:
                 fm_element.append(fault.to_xml(section_id=i))
+                i += 1
 
         # Awkward way of getting the xml file to be written in a way that's easy to read.
         xml_dom = minidom.parseString(ElemTree.tostring(opensha_element, encoding="UTF-8", xml_declaration=True))
