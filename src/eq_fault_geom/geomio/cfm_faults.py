@@ -746,6 +746,7 @@ class CfmFault:
         if self.parent is not None:
             if fault_number in self.parent.fault_numbers:
                 print("Duplicate fault number: {:d}".format(fault_number))
+        self._number = fault_number
 
     @property
     def parent(self):
@@ -771,7 +772,7 @@ class CfmFault:
         # Unique fault identifier
         tag_name = "i{:d}".format(section_id)
         # Metadata
-        attribute_dic = {"sectionId": "{:d}".format(section_id),
+        attribute_dic = {"sectionId": "{:d}".format(self.number),
                          "sectionName": self.name,
                          "aveLongTermSlipRate": "{:.1f}".format(self.sr_best),
                          "slipRateStDev": "{:.1f}".format(self.sr_sigma),
