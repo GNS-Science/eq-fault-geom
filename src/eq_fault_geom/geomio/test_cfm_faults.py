@@ -8,6 +8,7 @@ from src.eq_fault_geom.geomio.cfm_faults import CfmMultiFault
 from src.eq_fault_geom.geomio.cfm_faults import CfmFault
 from src.eq_fault_geom.geomio.cfm_faults import required_fields
 from src.eq_fault_geom.geomio.cfm_faults import expected_fields
+from src.eq_fault_geom.geomio.cfm_faults import valid_dip_directions
 
 class test_cfm_faults(TestCase, XmlTestMixin):
 
@@ -26,6 +27,8 @@ class test_cfm_faults(TestCase, XmlTestMixin):
         self.sorted_df = self.sorted_df.reset_index(drop=True)
 
         self.faults = []
+
+
 
 
 
@@ -89,6 +92,13 @@ class test_cfm_fault(TestCase):
         self.cmf_fault = CfmFault()
         self.logger = logging.getLogger('cmf_logger')
 
+        self.filename = "../../../data/cfm_linework/NZ_CFM_v0_3_170620.shp"
+        self.fault_geodataframe = gpd.GeoDataFrame.from_file(self.filename)
+        self.cmf_faults = CfmMultiFault(self.fault_geodataframe)
+        # Sort alphabetically by name
+        self.sorted_df = self.fault_geodataframe.sort_values("FZ_Name")
+        # Reset index to line up with alphabetical sorting
+        self.sorted_df = self.sorted_df.reset_index(drop=True)
 
     # def test_depth_best(self): => This gets tested by depth_max and depth_min
     #     self.cmf_fault.depth_best = 5.5
@@ -209,11 +219,26 @@ class test_cfm_fault(TestCase):
 
 
 
+#not sure if the test beolw is correct;
+    def test_dip_dir_str(self):
+        dip_dir = 'NE'
+        self.cmf_fault.dip_dir_str = dip_dir
+        self.assertIsInstance(dip_dir, str)
 
-    # def test_dip_dir_str(self):
-    #     assert False
-    #
-    #
+        series = self.sorted_df.iloc[0]
+        self.cmf_fault.nztm_trace = series['geometry']
+
+        with self.assertLogs(logger=self.logger, level='WARNING') as cm:
+            self.cmf_fault.validate_dip_direction()
+            self.assertIn(
+                "WARNING:cmf_logger:Supplied trace and dip direction are inconsistent", cm.output
+            )
+
+        dip_dir = None
+        self.cmf_fault.dip_dir_str = dip_dir
+        self.assertEqual(self.cmf_fault.dip_dir, 126.52414722779176)
+
+
     #
     # def test_dip_sigma(self):
     #     assert False
@@ -221,8 +246,35 @@ class test_cfm_fault(TestCase):
     # def test_dip_dir(self):
     #     assert False
     #
-    # def test_validate_dip_direction(self):
-    #     assert False
+    def test_validate_dip_direction(self):
+        series = self.sorted_df.iloc[0]
+        self.cmf_fault.nztm_trace = series['geometry']
+
+        dip_dir = 'SE'
+        self.cmf_fault.dip_dir_str = dip_dir
+
+        self.cmf_fault.validate_dip_direction()
+        self.assertEqual(self.cmf_fault.dip_dir, 126.52414722779176)
+
+        dip_dir = None
+        self.cmf_fault.dip_dir_str = dip_dir
+        with self.assertLogs(logger=self.logger, level='WARNING') as cm:
+            self.cmf_fault.validate_dip_direction()
+            self.assertIn(
+                "WARNING:cmf_logger:Insufficient information to validate dip direction", cm.output
+            )
+
+        dip_dir = 'NE'
+        self.cmf_fault.dip_dir_str = dip_dir
+        with self.assertLogs(logger=self.logger, level='WARNING') as cm:
+            self.cmf_fault.validate_dip_direction()
+            self.assertIn(
+                "WARNING:cmf_logger:Supplied trace and dip direction are inconsistent", cm.output
+            )
+
+
+
+
     #
     # def test_validate_dip(self):
     #     assert False
@@ -302,8 +354,18 @@ class test_cfm_fault(TestCase):
     # def test_parent(self):
     #     assert False
     #
+
+
     # def test_from_series(self):
-    #     assert False
+    #     series = self.sorted_df.iloc[0]
+    #     # length = series.
+    #     response = self.cmf_fault.from_series(series)
+
+
+
+
+
+
     #
     # def test_to_xml(self):
     #     assert False

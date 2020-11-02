@@ -448,6 +448,7 @@ class CfmFault:
         else:
             self._dip_dir_str = None
             if self.nztm_trace is not None:
+                #print("dip_dir is None, nztm_trace is not none")
                 dd_from_trace, _ = calculate_dip_direction(self.nztm_trace)
                 self._dip_dir = dd_from_trace
 
@@ -466,6 +467,7 @@ class CfmFault:
         """
         if any([a is None for a in [self.dip_dir_str, self.nztm_trace]]):
             print("Insufficient information to validate dip direction")
+            self.logger.warning("Insufficient information to validate dip direction")
             return
         else:
             # Trace and dip direction
@@ -478,8 +480,8 @@ class CfmFault:
                     self._dip_dir = reversed_dd
                 else:
                     print("{}: Supplied trace and dip direction {} are inconsistent: expect either {:.1f} or {:.1f} "
-                          "dip azimuth. Please check...".format(self.name, self.dip_dir_str,
-                                                                dd_from_trace, reversed_dd))
+                          "dip azimuth. Please check...".format(self.name, self.dip_dir_str, dd_from_trace, reversed_dd))
+                    self.logger.warning("Supplied trace and dip direction are inconsistent")
                     self._nztm_trace = line
                     self._dip_dir = dd_from_trace
             else:
