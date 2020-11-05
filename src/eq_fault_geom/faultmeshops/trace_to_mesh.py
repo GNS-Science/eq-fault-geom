@@ -7,7 +7,7 @@ import numpy as np
 
 import meshio
 
-from trace_operations import calculate_dip_rotation
+from .trace_operations import calculate_dip_rotation
 
 
 def project_mesh_from_trace(fault_info: pd.Series, cell_type: str = "triangle",
