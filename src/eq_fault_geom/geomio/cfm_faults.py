@@ -206,7 +206,7 @@ def fault_trace_xml(geometry: LineString, section_name: str, z: Union[float, int
     return trace_element
 
 
-#class CfmMultiFault(CfmLogger):
+
 class CfmMultiFault:
     """
     Class to hold data for multiple faults, read in from shapefile (and hopefully also tsurfaces)

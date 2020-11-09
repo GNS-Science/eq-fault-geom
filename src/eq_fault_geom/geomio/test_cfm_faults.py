@@ -239,13 +239,28 @@ class test_cfm_fault(TestCase):
         self.assertEqual(self.cmf_fault.dip_dir, 126.52414722779176)
 
 
-    #
-    # def test_dip_sigma(self):
-    #     assert False
+    #still working on this
+    def test_dip_sigma(self):
+        self.cmf_fault._dip_sigma = 8.6
+        self.assertEqual(self.cmf_fault.dip_sigma, 8.6)
+
+        self.cmf_fault._dip_sigma = None
+        self.cmf_fault.dip_min = 16
+        self.cmf_fault.dip_max = 25
+        self.assertEqual(self.cmf_fault.dip_sigma, 4.5)
+
+
+
+        # #with self.assertRaises(ValueError) as cm:
+        # self.cmf_fault.dip_min = 16
+        # self.cmf_fault.dip_max = None
+        # self.cmf_fault.dip_sigma
+
     #
     # def test_dip_dir(self):
     #     assert False
     #
+
     def test_validate_dip_direction(self):
         series = self.sorted_df.iloc[0]
         self.cmf_fault.nztm_trace = series['geometry']
