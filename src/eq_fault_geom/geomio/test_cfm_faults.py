@@ -14,8 +14,6 @@ class test_cfm_faults(TestCase, XmlTestMixin):
 
     def setUp(self):
 
-        #self.logger = logging.basicConfig(filename='cfm_faults_testing.log', level=logging.DEBUG)
-        # self.logger = logging.getLogger('cmf_logger')
         self.filename = "../../../data/cfm_linework/NZ_CFM_v0_3_170620.shp"
         self.fault_geodataframe = gpd.GeoDataFrame.from_file(self.filename)
         self.cmf_faults = CfmMultiFault(self.fault_geodataframe)
