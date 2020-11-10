@@ -249,12 +249,11 @@ class test_cfm_fault(TestCase):
         self.cmf_fault.dip_max = 25
         self.assertEqual(self.cmf_fault.dip_sigma, 4.5)
 
-
-
-        # #with self.assertRaises(ValueError) as cm:
-        # self.cmf_fault.dip_min = 16
-        # self.cmf_fault.dip_max = None
-        # self.cmf_fault.dip_sigma
+        # I think no need to test the Valuerror here as it should satisfy the validate_dip() function
+        # self.cmf_fault.dip_min = None
+        # self.cmf_fault.dip_max = 25
+        # with self.assertRaises(ValueError):
+        #     self.cmf_fault.dip_sigma
 
     #
     # def test_dip_dir(self):
@@ -288,11 +287,19 @@ class test_cfm_fault(TestCase):
             )
 
 
+    def test_validate_dip(self):
+        dip = 15.6
+        self.assertIsInstance(self.cmf_fault.validate_dip(dip), float)
 
+        dip = "Hello"
+        with self.assertRaises(Exception):
+            self.cmf_fault.validate_dip(dip)
 
-    #
-    # def test_validate_dip(self):
-    #     assert False
+        dip = -20.6 #should be between 0 - 90 otherwise assert error
+        with self.assertRaises(Exception):
+            self.cmf_fault.validate_dip(dip)
+
+#assert False
     #
     # def test_nztm_trace(self):
     #     assert False

@@ -434,7 +434,7 @@ class CfmFault:
         elif not any([a is None for a in (self.dip_min, self.dip_max)]):
             return root_mean_square(np.array([self.dip_min, self.dip_max]))
         else:
-            raise ValueError("Insufficient data to calculate dip_sigma!")
+            raise ValueError("Insufficient data to calculate dip_sigma!")   # <= not sure if you need this step as this will go through validate_dip
 
     @dip_dir_str.setter
     def dip_dir_str(self, dip_dir: str):
