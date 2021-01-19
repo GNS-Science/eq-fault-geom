@@ -1,4 +1,5 @@
-from eq_fault_geom.geomio.array_operations import read_tiff
+# Something was going wrong with the geotiff reading
+from eq_fault_geom.geomio.array_operations import read_gmt_grid
 import geopandas as gpd
 import numpy as np
 from shapely.geometry import LineString, Polygon, Point
@@ -43,7 +44,7 @@ Read and pre process data from files, set parameters for meshing
 
 # Relevant quantities that control tile distribution
 # Swath profile half width; for making (slightly) smoothed profiles/cross-sections through interface.
-profile_half_width = 2000
+profile_half_width = 5000
 # Spacing between down-dip profiles (and therefore tiles) in the along-strike direction
 profile_spacing = 10000
 # Max distance to select points to fit
@@ -51,11 +52,9 @@ search_radius = 1e4
 
 
 # Read in grid from subduction interface
-tiff = os.path.join(data_dir, "subduction/williams_0_005_nztm.tif")
+tiff = os.path.join(data_dir, "subduction/kermadec_lt50k.grd")
 # print(data_dir, tiff, Path(tiff).resolve())
-x, y, z = read_tiff(tiff)
-# Multiply z coordinates by 1000 so that everything is in metres
-z *= 1000
+x, y, z = read_gmt_grid(tiff)
 
 # Turn grid into xyz (n x 3) array, by making x and y grids and flattening them.
 x_grid, y_grid = np.meshgrid(x, y)
@@ -116,41 +115,42 @@ for along_index, along in enumerate(along_spaced):
 
     # Remove nans
     across_no_nans = swath_across[~np.isnan(swath_z)]
+    if across_no_nans.size:
+        # Start and end of profile after nans have been removed
+        start_across = min(across_no_nans)
+        end_across = max(across_no_nans)
 
-    # Start and end of profile after nans have been removed
-    start_across = min(across_no_nans)
-    end_across = max(across_no_nans)
+        # Dummy profile distances to create interpolated profile.
+        # Not used for down-dip distances.
+        # every 2 km, for now
+        initial_spacing = np.arange(start_across, end_across, profile_half_width)
 
-    # Dummy profile distances to create interpolated profile.
-    # Not used for down-dip distances.
-    # every 2 km, for now
-    initial_spacing = np.arange(start_across, end_across, profile_half_width)
+        # Combine and sort distances along profiles (with z)
+        across_vs_z = np.vstack((across_no_nans, swath_z[~np.isnan(swath_z)])).T
+        sorted_coords = across_vs_z[across_vs_z[:, 0].argsort()]
 
-    # Combine and sort distances along profiles (with z)
-    across_vs_z = np.vstack((across_no_nans, swath_z[~np.isnan(swath_z)])).T
-    sorted_coords = across_vs_z[across_vs_z[:, 0].argsort()]
+        # Interpolate, then turn into shapely linestring
+        interp_z = np.interp(initial_spacing, sorted_coords[:, 0], sorted_coords[:, 1])
+        if len(interp_z) > 1:
+            interp_line = LineString(np.vstack((initial_spacing, interp_z)).T)
 
-    # Interpolate, then turn into shapely linestring
-    interp_z = np.interp(initial_spacing, sorted_coords[:, 0], sorted_coords[:, 1])
-    interp_line = LineString(np.vstack((initial_spacing, interp_z)).T)
+            # Interpolate locations of profile centres
+            interpolation_distances = np.arange(profile_spacing/2, interp_line.length, profile_spacing)
+            interpolated_points = [interp_line.interpolate(distance) for distance in interpolation_distances]
 
-    # Interpolate locations of profile centres
-    interpolation_distances = np.arange(profile_spacing/2, interp_line.length, profile_spacing)
-    interpolated_points = [interp_line.interpolate(distance) for distance in interpolation_distances]
+            # Turn coordinates of interpolated points back into arrays
+            interpolated_x = np.array([point.x for point in interpolated_points])
+            interpolated_z_values = np.array([point.y for point in interpolated_points])
 
-    # Turn coordinates of interpolated points back into arrays
-    interpolated_x = np.array([point.x for point in interpolated_points])
-    interpolated_z_values = np.array([point.y for point in interpolated_points])
+            # Calculate NZTM coordinates of tile centres
+            point_xys = np.array([row_end + across_i * across_vec for across_i in interpolated_x])
+            point_xyz = np.vstack((point_xys.T, interpolated_z_values)).T
 
-    # Calculate NZTM coordinates of tile centres
-    point_xys = np.array([row_end + across_i * across_vec for across_i in interpolated_x])
-    point_xyz = np.vstack((point_xys.T, interpolated_z_values)).T
+            patch_indices = [(along_index, across_index) for across_index in range(point_xyz.shape[0])]
 
-    patch_indices = [(along_index, across_index) for across_index in range(point_xyz.shape[0])]
-
-    # Store in list
-    all_points_ls.append(point_xyz)
-    all_indices += patch_indices
+            # Store in list
+            all_points_ls.append(point_xyz)
+            all_indices += patch_indices
 
 
 # List to array
@@ -167,7 +167,7 @@ dips = []
 top_depths = []
 bottom_depths = []
 
-for centre_point in all_points_array[:5000]:
+for centre_point in all_points_array:
     # Find distances of all points from centre
     difference_vectors = all_xyz - centre_point
     distances = np.linalg.norm(difference_vectors, axis=1)
@@ -216,14 +216,14 @@ all_polygons = [Polygon(array_i) for array_i in all_tile_ls]
 
 
 outlines = gpd.GeoSeries(all_polygons, crs="epsg:2193")
-outlines.to_file("tile_outlines.shp")
+outlines.to_file("hk_tile_outlines.shp")
 
 outlines_wgs = outlines.to_crs(epsg=4326)
-outlines_wgs.to_file("tile_outlines.shp")
+outlines_wgs.to_file("hk_tile_outlines.shp")
 
 all_points = [Point(row) for row in all_points_array]
 centres = gpd.GeoSeries(all_points, crs="epsg:2193")
-centres.to_file("tile_centres.shp")
+centres.to_file("hk_tile_centres.shp")
 all_points_z = np.array([point.z for point in all_points])
 
 # Export in alternative format
@@ -240,7 +240,7 @@ for trace, dip, top_depth, bottom_depth in zip(top_trace_wgs.geometry, dips, top
         out_alternative_ls.append([x0, y0, x1, y1, dip, top_depth / -1000, bottom_depth / -1000])
 
 out_alternative_array = np.array(out_alternative_ls)
-index_array = np.array(all_indices[:5000])
+index_array = np.array(all_indices)
 
 
 
@@ -248,7 +248,7 @@ index_array = np.array(all_indices[:5000])
 # #Dataframes provides simpler formatting options
 df_indices  = pd.DataFrame(index_array, columns=["along_strike_index", "down_dip_index"])
 df_tiles    = pd.DataFrame(out_alternative_array, columns=["lon1(deg)", "lat1(deg)", "lon2(deg)", "lat2(deg)", "dip (deg)", "top_depth (km)", "bottom_depth (km)"])
-df_centres  = pd.DataFrame(all_points_array[:5000], columns=["cen_x", "cen_y", "cen_z"])
+df_centres  = pd.DataFrame(all_points_array, columns=["cen_x", "cen_y", "cen_z"])
 
 #extend alt_out with tile geometry
 df_tiles_xyz = pd.DataFrame(all_polygons, columns=['tile_geometry'])
@@ -258,8 +258,8 @@ df_tiles = pd.merge(df_tiles, df_tiles_xyz, left_index=True, right_index=True)
 df_tiles_out = pd.merge(df_indices, df_tiles, left_index=True, right_index=True)
 df_centres_out = pd.merge(df_indices, df_centres, left_index=True, right_index=True)
 
-df_tiles_out.to_csv(os.path.join(output_dir, "tile_parameters.csv"), index=False)
-df_centres_out.to_csv(os.path.join(output_dir, "tile_centres_nztm.csv"), index=False)
+df_tiles_out.to_csv(os.path.join(output_dir, "hk_tile_parameters.csv"), index=False)
+df_centres_out.to_csv(os.path.join(output_dir, "hk_tile_centres_nztm.csv"), index=False)
 
 # # TODO set to be installable by pip, to avoid these stupid path strings
 # np.savetxt(data_dir + "subduction/tile_parameters.txt", out_array_with_indices, fmt="%.6f",
