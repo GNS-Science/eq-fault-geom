@@ -167,7 +167,7 @@ dips = []
 top_depths = []
 bottom_depths = []
 
-for centre_point in all_points_array[:5000]:
+for centre_point in all_points_array:
     # Find distances of all points from centre
     difference_vectors = all_xyz - centre_point
     distances = np.linalg.norm(difference_vectors, axis=1)
