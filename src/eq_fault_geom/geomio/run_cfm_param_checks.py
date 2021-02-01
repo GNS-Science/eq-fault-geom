@@ -30,8 +30,14 @@ poly_ls.append(matt_poly)
 # matt_gs = gpd.GeoSeries(matt_poly[0], crs=4326)
 # matt_gs.to_file("matt_poly.shp")
 
+# Width of trace buffer (in metres)
+buffer_width = 5000.
+
 # Read and write data
 data = CfmMultiFault.from_shp(shp, exclude_regions=poly_ls)
-xml = data.to_opensha_xml(exclude_subduction=True)
+polygons = gpd.GeoDataFrame(geometry=[fault.self.combined_buffer_polygon(buffer_width) for fault in data.faults], crs=4326)
+
+
+xml = data.to_opensha_xml(exclude_subduction=True, buffer_width=buffer_width)
 with open("test3.xml", "wb") as f:
     f.write(xml)

@@ -7,6 +7,7 @@ import geopandas as gpd
 import pandas as pd
 import numpy as np
 from shapely.geometry import LineString, Polygon, MultiPolygon
+from shapely.ops import unary_union
 from pyproj import Transformer
 
 transformer = Transformer.from_crs(2193, 4326, always_xy=True)
@@ -204,6 +205,28 @@ def fault_trace_xml(geometry: LineString, section_name: str, z: Union[float, int
     return trace_element
 
 
+def fault_polygon_xml(polygon: Polygon, section_name: str, z: Union[float, int] = 0):
+    """
+
+    :param polygon: Should be lon lat
+    :param section_name:
+    :param z: Generally zero
+    :return:
+    """
+    polygon_element = ElemTree.Element("ZonePolygon", attrib={"name": section_name})
+    location_list = ElemTree.Element("LocationList")
+
+    ll_float_str = "{:.4f}"
+    x, y = polygon.exterior.xy
+    for x_i, y_i in zip(x[:-1], y[:-1]):
+        loc_element = ElemTree.Element("Location", attrib={"Latitude": ll_float_str.format(y_i),
+                                                           "Longitude": ll_float_str.format(x_i),
+                                                           "Depth": ll_float_str.format(z)})
+        location_list.append(loc_element)
+    polygon_element.append(location_list)
+    return polygon_element
+
+
 def polygons_to_shapely_format(supplied_polygons: Union[str, Polygon, MultiPolygon, List[Polygon], np.ndarray]):
     """
     Function to turn supplied polygon(s) into list of shapely Polygon objects
@@ -322,7 +345,7 @@ class CfmMultiFault:
         multi_fault = cls(fault_geodataframe, exclude_regions=exclude_regions)
         return multi_fault
 
-    def to_opensha_xml(self, exclude_subduction: bool = True):
+    def to_opensha_xml(self, exclude_subduction: bool = True, buffer_width: float = 5000.):
         """
         Write out XML in OpenSHA format
         :param exclude_subduction: Do not include subduction zones from CFM
@@ -343,7 +366,7 @@ class CfmMultiFault:
                                                               for name in subduction_names])])
             # Add XML for fault
             if not exclude_condition:
-                fm_element.append(fault.to_xml(section_id=i))
+                fm_element.append(fault.to_xml(section_id=i, buffer_width=buffer_width))
                 i += 1
 
         # Awkward way of getting the xml file to be written in a way that's easy to read.
@@ -543,6 +566,48 @@ class CfmFault:
         assert isinstance(dip, (float, int))
         assert valid_dip_range[0] <= dip <= valid_dip_range[1]
         return dip
+
+    @property
+    def down_dip_vector(self):
+        assert all([x is not None for x in [self.dip_dir, self.dip_min]])
+        z = np.sin(np.radians(self.dip_min))
+        x, y = np.cos(np.radians(self.dip_min)) * np.array([np.sin(np.radians(self.dip_dir)),
+                                                        np.cos(np.radians(self.dip_dir))])
+        return np.array([x, y, -z])
+
+    @property
+    def down_dip_polygon(self):
+        surface_trace_array = np.vstack(self.nztm_trace.xy).T
+        bottom_trace = surface_trace_array + self.down_dip_vector[:-1] * self.depth_max * 1.e3
+        combined_polygon_array = np.vstack((surface_trace_array, bottom_trace[::-1]))
+        return Polygon(combined_polygon_array)
+
+    def surface_trace_buffer(self, buffer_distance: Union[int, float] = 100., cap_style: int = 2,
+                             join_style: int = 2):
+        """
+
+        :param buffer_distance:
+        :param cap_style: Default is flat,
+        see https://shapely.readthedocs.io/en/stable/manual.html#shapely.geometry.CAP_STYLE
+        :param join_style: Default is mitred
+        :return:
+        """
+        return self.nztm_trace.buffer(buffer_distance, cap_style=cap_style, join_style=join_style)
+
+    def combined_buffer_polygon(self, buffer_distance, cap_style: int = 2, join_style: int = 2, wgs: bool = True):
+        trace_buffer = self.surface_trace_buffer(buffer_distance, cap_style=cap_style, join_style=join_style)
+        combined_buffer = unary_union([trace_buffer, self.down_dip_polygon])
+
+        if wgs:
+            x, y = combined_buffer.exterior.xy
+            wgs_x, wgs_y = transformer.transform(x, y)
+            return Polygon([[xi, yi] for xi, yi in zip(wgs_x, wgs_y)])
+        else:
+            return combined_buffer
+
+
+
+
 
     # Trace
     @property
@@ -767,7 +832,7 @@ class CfmFault:
             "Depth_Max"]
         return fault
 
-    def to_xml(self, section_id: int):
+    def to_xml(self, section_id: int, buffer_width: float = 5000.):
         # Unique fault identifier
         tag_name = "i{:d}".format(section_id)
         # Metadata
@@ -788,7 +853,11 @@ class CfmFault:
 
         # Initialize XML element
         fault_element = ElemTree.Element(tag_name, attrib=attribute_dic)
+        # Add sub element for FZ buffer
+        polygon_element = fault_polygon_xml(self.combined_buffer_polygon(buffer_width), self.name)
+        fault_element.append(polygon_element)
         # Add sub element for fault trace
         trace_element = fault_trace_xml(self.wgs_trace, self.name)
         fault_element.append(trace_element)
+
         return fault_element
