@@ -30,7 +30,10 @@ def shp_to_multi_vtk(in_path, out_path, cell_type, output_fields):
     shp_df = gpd.GeoDataFrame.from_file(in_path)
 
     # Sort alphabetically by name
-    sorted_df = shp_df.sort_values("Name")
+    try:
+        sorted_df = shp_df.sort_values("Name")
+    except:
+        sorted_df = shp_df.sort_values("FZ_Name")
 
     # Reset index to line up with alphabetical sorting
     sorted_df = sorted_df.reset_index(drop=True)
