@@ -44,11 +44,11 @@ Read and pre process data from files, set parameters for meshing
 
 # Relevant quantities that control tile distribution
 # Swath profile half width; for making (slightly) smoothed profiles/cross-sections through interface.
-profile_half_width = 5000
+profile_half_width = 15000
 # Spacing between down-dip profiles (and therefore tiles) in the along-strike direction
-profile_spacing = 10000
+profile_spacing = 30000
 # Max distance to select points to fit
-search_radius = 1e4
+search_radius = 3e4
 
 
 # Read in grid from subduction interface
@@ -258,8 +258,8 @@ df_tiles = pd.merge(df_tiles, df_tiles_xyz, left_index=True, right_index=True)
 df_tiles_out = pd.merge(df_indices, df_tiles, left_index=True, right_index=True)
 df_centres_out = pd.merge(df_indices, df_centres, left_index=True, right_index=True)
 
-df_tiles_out.to_csv(os.path.join(output_dir, "hk_tile_parameters.csv"), index=False)
-df_centres_out.to_csv(os.path.join(output_dir, "hk_tile_centres_nztm.csv"), index=False)
+df_tiles_out.to_csv(os.path.join(output_dir, "hk_tile_parameters_30.csv"), index=False)
+df_centres_out.to_csv(os.path.join(output_dir, "hk_tile_centres_nztm_30.csv"), index=False)
 
 # # TODO set to be installable by pip, to avoid these stupid path strings
 # np.savetxt(data_dir + "subduction/tile_parameters.txt", out_array_with_indices, fmt="%.6f",

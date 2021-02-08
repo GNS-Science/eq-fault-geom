@@ -4,6 +4,8 @@ from shapely.geometry import Polygon
 
 from eq_fault_geom.geomio.cfm_faults import CfmMultiFault
 
+# shp = ("/Users/arh79/PycharmProjects/eq-fault-geom/src/eq_fault_geom/geomio/CFM_v0_5_Review/"
+       # "Shapefiles/NZ_CFM_v0_5_290121.shp")
 shp = "/Users/arh79/PycharmProjects/eq-fault-geom/src/eq_fault_geom/geomio/cfm_linework/NZ_CFM_v0_3_170620.shp"
 
 # Polygons to exclude faults from XML
@@ -35,9 +37,15 @@ buffer_width = 5000.
 
 # Read and write data
 data = CfmMultiFault.from_shp(shp, exclude_regions=poly_ls)
-polygons = gpd.GeoDataFrame(geometry=[fault.self.combined_buffer_polygon(buffer_width) for fault in data.faults], crs=4326)
+polygons = [fault.combined_buffer_polygon(buffer_width) for fault in data.faults if abs(fault.down_dip_vector[-1]) > 1.e-3]
+polygons_gdf = gpd.GeoDataFrame(geometry=polygons, crs=4326)
+polygons_gdf.to_file("fault_buffers.shp")
 
 
-xml = data.to_opensha_xml(exclude_subduction=True, buffer_width=buffer_width)
-with open("test3.xml", "wb") as f:
-    f.write(xml)
+xml_buffer = data.to_opensha_xml(exclude_subduction=True, buffer_width=buffer_width, write_buffers=True)
+with open("cfm_0_3_buffer.xml", "wb") as f:
+    f.write(xml_buffer)
+
+xml_nobuffer = data.to_opensha_xml(exclude_subduction=True, buffer_width=buffer_width, write_buffers=False)
+with open("cfm_0_3_no_buffer.xml", "wb") as f:
+    f.write(xml_nobuffer)
