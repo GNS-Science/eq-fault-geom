@@ -9,6 +9,7 @@ from src.eq_fault_geom.geomio.cfm_faults import CfmFault
 from src.eq_fault_geom.geomio.cfm_faults import required_fields
 from src.eq_fault_geom.geomio.cfm_faults import expected_fields
 from src.eq_fault_geom.geomio.cfm_faults import valid_dip_directions
+from shapely.geometry.polygon import LineString
 
 class test_cfm_faults(TestCase, XmlTestMixin):
 
@@ -297,17 +298,23 @@ class test_cfm_fault(TestCase):
         with self.assertRaises(Exception):
             self.cmf_fault.validate_dip(dip)
 
-#assert False
-    #
-    # def test_nztm_trace(self):
-    #     assert False
-    #
-    # def test_nztm_trace(self):
-    #     assert False
-    #
-    # def test_wgs_trace(self):
-    #     assert False
-    #
+    def test_nztm_trace(self):
+        series = self.sorted_df.iloc[0]
+        trace = series['geometry']
+        #trace = 0.124
+        self.cmf_fault.nztm_trace = trace
+
+    def test_wgs_trace(self):
+        series = self.sorted_df.iloc[0]
+        trace = series['geometry']
+        self.cmf_fault.nztm_trace = trace
+
+        reponseX, reponseY = self.cmf_fault.wgs_trace.coords.xy
+        response = reponseX.tolist()
+        actual = [169.6687830847674, 169.81909392439323, 169.9253608851993, 169.99481719677544]
+        self.assertEqual(response, actual)
+
+
     # def test_rake_best(self):
     #     assert False
     #
