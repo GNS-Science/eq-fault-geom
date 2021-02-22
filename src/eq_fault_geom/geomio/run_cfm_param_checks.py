@@ -6,7 +6,7 @@ from eq_fault_geom.geomio.cfm_faults import CfmMultiFault
 
 # shp = ("/Users/arh79/PycharmProjects/eq-fault-geom/src/eq_fault_geom/geomio/CFM_v0_5_Review/"
        # "Shapefiles/NZ_CFM_v0_5_290121.shp")
-shp = "/Users/arh79/PycharmProjects/eq-fault-geom/src/eq_fault_geom/geomio/cfm_linework/NZ_CFM_v0_3_170620.shp"
+shp = "/Users/arh79/PycharmProjects/eq-fault-geom/src/eq_fault_geom/geomio/cfm_linework/NZ_CFM_v0_6_160221.shp"
 
 # Polygons to exclude faults from XML
 exclude_shp = "/Users/arh79/PycharmProjects/eq-fault-geom/src/eq_fault_geom/geomio/test_bop.shp"

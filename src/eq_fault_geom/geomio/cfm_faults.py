@@ -19,7 +19,7 @@ valid_dip_directions = list(dip_direction_ranges.keys()) + [None, "SUBVERTICAL A
 
 dominant_rake_ranges = {"reverse": (45, 135), "dextral": (135, 225), "sinistral": (315, 45), "normal": (225, 315)}
 secondary_rake_ranges = {"reverse": (0, 180), "dextral": (90, 270), "sinistral": (270, 90), "normal": (180, 360)}
-possible_rake_dirs = ['dextral', 'normal', 'reverse', 'sinistral']
+possible_rake_dirs = ['dextral', 'normal', 'reverse', 'sinistral', 'dextral and reverse', 'normal and dextral']
 
 # List of subduction zones to exclude if desired
 subduction_names = ("hikurangi", "puysegur")
@@ -37,7 +37,7 @@ expected_fields = ['Depth_Best', 'Depth_Max', 'Depth_Min', 'Dip_pref',
                    'geometry']
 
 # There will be a mess if these fields don't exist
-required_fields = ['FZ_Name', 'Number', 'geometry']
+required_fields = ['Name', 'Number', 'geometry']
 
 
 def smallest_difference(value1, value2):
@@ -316,10 +316,10 @@ class CfmMultiFault:
             trimmed_fault_gdf = fault_geodataframe
 
         # Temporarily avoid having to deal with zero dips
-        trimmed_fault_gdf = trimmed_fault_gdf[trimmed_fault_gdf.Dip_Best > 0]
+        trimmed_fault_gdf = trimmed_fault_gdf[trimmed_fault_gdf.Dip_pref > 0]
 
         # Sort alphabetically by name
-        sorted_df = trimmed_fault_gdf.sort_values("FZ_Name")
+        sorted_df = trimmed_fault_gdf.sort_values("Name")
         # Reset index to line up with alphabetical sorting
         sorted_df = sorted_df.reset_index(drop=True)
         for i, row in sorted_df.iterrows():
@@ -332,7 +332,7 @@ class CfmMultiFault:
         return self._faults
 
     def add_fault(self, series: pd.Series):
-        self.faults.append(CfmFault.from_series_old(series, parent_multifault=self))
+        self.faults.append(CfmFault.from_series(series, parent_multifault=self))
 
     @property
     def fault_numbers(self):
