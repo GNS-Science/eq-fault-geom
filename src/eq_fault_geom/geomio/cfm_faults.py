@@ -150,7 +150,7 @@ def calculate_dip_direction(line: LineString):
     p = np.polyfit(x, y, 1)
     gradient = p[0]
     # Gradient to bearing
-    bearing = 90 - np.degrees(np.arctan2(gradient, 1))
+    bearing = 180 - np.degrees(np.arctan2(gradient, 1))
     bearing_vector = np.array([np.sin(np.radians(bearing)), np.cos(np.radians(bearing))])
 
     # Determine whether line object fits strike convention
@@ -603,8 +603,9 @@ class CfmFault:
                     else:
                         print("{}: Supplied trace and dip direction {} are inconsistent: expect either {:.1f} or {:.1f} "
                               "dip azimuth. Please check...".format(self.name, self.dip_dir_str,
+                                                                    dd_from_trace, reversed_dd))
                         self.logger.warning("Supplied trace and dip direction are inconsistent")
-                        dd_from_trace, reversed_dd))
+
                         self._dip_dir = dd_from_trace
                 else:
                     self._dip_dir = dd_from_trace
