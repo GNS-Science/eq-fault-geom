@@ -4,11 +4,12 @@ from xmlunittest import XmlTestMixin
 import logging
 
 
-from eq_fault_geom.geomio.cfm_faults import CfmMultiFault
-from eq_fault_geom.geomio.cfm_faults import CfmFault
-from eq_fault_geom.geomio.cfm_faults import required_fields
-from eq_fault_geom.geomio.cfm_faults import expected_fields
-from eq_fault_geom.geomio.cfm_faults import valid_dip_directions
+from src.eq_fault_geom.geomio.cfm_faults import CfmMultiFault
+from src.eq_fault_geom.geomio.cfm_faults import CfmFault
+from src.eq_fault_geom.geomio.cfm_faults import required_fields
+from src.eq_fault_geom.geomio.cfm_faults import expected_fields
+from src.eq_fault_geom.geomio.cfm_faults import valid_dip_directions
+
 
 class test_cfm_faults(TestCase, XmlTestMixin):
 
