@@ -116,7 +116,7 @@ data/
 
 #tests
 src/eq_fault_geom/geomio/run_s.py
-src/eq_fault_geom/geomio/test_cfm_faults_v3.py
+
 
 
 # Spyder project settings
