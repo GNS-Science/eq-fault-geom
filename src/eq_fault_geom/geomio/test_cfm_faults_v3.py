@@ -4,24 +4,23 @@ from xmlunittest import XmlTestMixin
 import logging
 
 
-from src.eq_fault_geom.geomio.cfm_faults import CfmMultiFault
-from src.eq_fault_geom.geomio.cfm_faults import CfmFault
-from src.eq_fault_geom.geomio.cfm_faults import required_fields
-from src.eq_fault_geom.geomio.cfm_faults import expected_fields
-from src.eq_fault_geom.geomio.cfm_faults import valid_dip_directions
-from shapely.geometry.polygon import LineString
+from eq_fault_geom.geomio.cfm_faults import CfmMultiFault
+from eq_fault_geom.geomio.cfm_faults import CfmFault
+from eq_fault_geom.geomio.cfm_faults import required_fields
+from eq_fault_geom.geomio.cfm_faults import expected_fields
+from eq_fault_geom.geomio.cfm_faults import valid_dip_directions
 
 class test_cfm_faults(TestCase, XmlTestMixin):
 
     def setUp(self):
 
-        self.filename = "../../../data/cfm_linework/NZ_CFM_v0_3_170620.shp"
+        self.filename = "cfm_linework/NZ_CFM_v0_6_160221.shp"
         self.fault_geodataframe = gpd.GeoDataFrame.from_file(self.filename)
         self.cmf_faults = CfmMultiFault(self.fault_geodataframe)
         self.logger = logging.getLogger('cmf_logger')
 
         # Sort alphabetically by name
-        self.sorted_df = self.fault_geodataframe.sort_values("FZ_Name")
+        self.sorted_df = self.fault_geodataframe.sort_values("Name")
         # Reset index to line up with alphabetical sorting
         self.sorted_df = self.sorted_df.reset_index(drop=True)
 
@@ -38,7 +37,7 @@ class test_cfm_faults(TestCase, XmlTestMixin):
             self.cmf_faults.check_input1(df_response)
 
     def test_check_input2(self):
-        exf = [i for i in expected_fields if i not in ['Source2', 'Source1_1', 'Name']]
+        exf = [i for i in expected_fields if i not in ['Source2', 'Source1_1', 'Name', 'Qual_Code']]
         df_reponse = self.fault_geodataframe[exf[:-1]].copy()
         with self.assertLogs(logger=self.logger, level='WARNING') as cm:
             self.cmf_faults.check_input2(df_reponse)
@@ -91,11 +90,11 @@ class test_cfm_fault(TestCase):
         self.cmf_fault = CfmFault()
         self.logger = logging.getLogger('cmf_logger')
 
-        self.filename = "../../../data/cfm_linework/NZ_CFM_v0_3_170620.shp"
+        self.filename = "cfm_linework/NZ_CFM_v0_6_160221.shp"
         self.fault_geodataframe = gpd.GeoDataFrame.from_file(self.filename)
         self.cmf_faults = CfmMultiFault(self.fault_geodataframe)
         # Sort alphabetically by name
-        self.sorted_df = self.fault_geodataframe.sort_values("FZ_Name")
+        self.sorted_df = self.fault_geodataframe.sort_values("Name")
         # Reset index to line up with alphabetical sorting
         self.sorted_df = self.sorted_df.reset_index(drop=True)
 
@@ -235,7 +234,7 @@ class test_cfm_fault(TestCase):
 
         dip_dir = None
         self.cmf_fault.dip_dir_str = dip_dir
-        self.assertEqual(self.cmf_fault.dip_dir, 126.52414722779176)
+        self.assertEqual(self.cmf_fault.dip_dir, 330.15406806735484)
 
 
     #still working on this
@@ -267,7 +266,7 @@ class test_cfm_fault(TestCase):
         self.cmf_fault.dip_dir_str = dip_dir
 
         self.cmf_fault.validate_dip_direction()
-        self.assertEqual(self.cmf_fault.dip_dir, 126.52414722779176)
+        self.assertEqual(self.cmf_fault.dip_dir, 150.1540680673612)
 
         dip_dir = None
         self.cmf_fault.dip_dir_str = dip_dir
@@ -298,23 +297,17 @@ class test_cfm_fault(TestCase):
         with self.assertRaises(Exception):
             self.cmf_fault.validate_dip(dip)
 
-    def test_nztm_trace(self):
-        series = self.sorted_df.iloc[0]
-        trace = series['geometry']
-        #trace = 0.124
-        self.cmf_fault.nztm_trace = trace
-
-    def test_wgs_trace(self):
-        series = self.sorted_df.iloc[0]
-        trace = series['geometry']
-        self.cmf_fault.nztm_trace = trace
-
-        reponseX, reponseY = self.cmf_fault.wgs_trace.coords.xy
-        response = reponseX.tolist()
-        actual = [169.6687830847674, 169.81909392439323, 169.9253608851993, 169.99481719677544]
-        self.assertEqual(response, actual)
-
-
+#assert False
+    #
+    # def test_nztm_trace(self):
+    #     assert False
+    #
+    # def test_nztm_trace(self):
+    #     assert False
+    #
+    # def test_wgs_trace(self):
+    #     assert False
+    #
     # def test_rake_best(self):
     #     assert False
     #
