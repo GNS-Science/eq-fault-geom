@@ -9,13 +9,13 @@ from src.eq_fault_geom.geomio.cfm_faults import CfmFault
 from src.eq_fault_geom.geomio.cfm_faults import required_fields
 from src.eq_fault_geom.geomio.cfm_faults import expected_fields
 from src.eq_fault_geom.geomio.cfm_faults import valid_dip_directions
-
+from shapely.geometry.polygon import LineString
 
 class test_cfm_faults(TestCase, XmlTestMixin):
 
     def setUp(self):
 
-        self.filename = "cfm_linework/NZ_CFM_v0_6_160221.shp"
+        self.filename = "../../../data/cfm_linework/NZ_CFM_v0_6_160221.shp"
         self.fault_geodataframe = gpd.GeoDataFrame.from_file(self.filename)
         self.cmf_faults = CfmMultiFault(self.fault_geodataframe)
         self.logger = logging.getLogger('cmf_logger')
@@ -91,7 +91,7 @@ class test_cfm_fault(TestCase):
         self.cmf_fault = CfmFault()
         self.logger = logging.getLogger('cmf_logger')
 
-        self.filename = "cfm_linework/NZ_CFM_v0_6_160221.shp"
+        self.filename = "../../../data/cfm_linework/NZ_CFM_v0_6_160221.shp"
         self.fault_geodataframe = gpd.GeoDataFrame.from_file(self.filename)
         self.cmf_faults = CfmMultiFault(self.fault_geodataframe)
         # Sort alphabetically by name
@@ -235,7 +235,7 @@ class test_cfm_fault(TestCase):
 
         dip_dir = None
         self.cmf_fault.dip_dir_str = dip_dir
-        self.assertEqual(self.cmf_fault.dip_dir, 330.15406806735484)
+        self.assertEqual(self.cmf_fault.dip_dir, 330.15406806735234)
 
 
     #still working on this
@@ -267,7 +267,7 @@ class test_cfm_fault(TestCase):
         self.cmf_fault.dip_dir_str = dip_dir
 
         self.cmf_fault.validate_dip_direction()
-        self.assertEqual(self.cmf_fault.dip_dir, 150.1540680673612)
+        self.assertEqual(self.cmf_fault.dip_dir, 150.15406806735643)
 
         dip_dir = None
         self.cmf_fault.dip_dir_str = dip_dir
@@ -298,17 +298,23 @@ class test_cfm_fault(TestCase):
         with self.assertRaises(Exception):
             self.cmf_fault.validate_dip(dip)
 
-#assert False
-    #
-    # def test_nztm_trace(self):
-    #     assert False
-    #
-    # def test_nztm_trace(self):
-    #     assert False
-    #
-    # def test_wgs_trace(self):
-    #     assert False
-    #
+    def test_nztm_trace(self):
+        series = self.sorted_df.iloc[0]
+        trace = series['geometry']
+        #trace = 0.124
+        self.cmf_fault.nztm_trace = trace
+
+    def test_wgs_trace(self):
+        series = self.sorted_df.iloc[0]
+        trace = series['geometry']
+        self.cmf_fault.nztm_trace = trace
+
+        reponseX, reponseY = self.cmf_fault.wgs_trace.coords.xy
+        response = reponseX.tolist()
+        actual = [172.81975618060406, 172.78381840673984, 172.7622924223485]
+        self.assertEqual(response, actual)
+
+
     # def test_rake_best(self):
     #     assert False
     #
