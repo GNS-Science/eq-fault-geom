@@ -716,13 +716,19 @@ class CfmFault:
         rake_v = self.validate_rake(rake)
         if self.rake_min is not None:
             if rake_v < self.rake_min:
-                print("{}: rake_best ({.2f}) lower than rake_min ({.2f})".format(self.name, rake_v, self.rake_min))
+                #print("{}: rake_best ({.2f}) lower than rake_min ({.2f})".format(self.name, rake_v, self.rake_min))
+                print("{}: rake_best ({}) lower than rake_min ({})".format(self.name, rake_v, self.rake_min))
+                self.logger.warning("rake_best is lower than rake_min")
         if self.rake_max is not None:
             if rake_v > self.rake_max:
-                print("{}: rake_best ({.2f}) greater than rake_max ({.2f})".format(self.name, rake_v, self.rake_max))
+                #print("{}: rake_best ({.2f}) greater than rake_max ({.2f})".format(self.name, rake_v, self.rake_max))
+                print("{}: rake_best ({}) greater than rake_max ({})".format(self.name, rake_v, self.rake_max))
+                self.logger.warning("rake_best is greater than rake_max")
         self._rake_best = rake_v
+
         if self.sense_dom is not None:
             self.validate_rake_sense()
+
 
     @staticmethod
     def rake_to_opensha(rake: Union[float, int]):
@@ -738,7 +744,9 @@ class CfmFault:
         rake_v = self.validate_rake(rake)
         for key, rake_value in zip(["rake_min", "rake_best"], [self.rake_min, self.rake_best]):
             if rake_value is not None and bearing_leq(rake_v, rake_value):
-                print("{}: rake_max ({:.2f}) is lower than {} ({:.2f})".format(self.name, rake_v, key, rake_value))
+                #print("{}: rake_max ({:.2f}) is lower than {} ({:.2f})".format(self.name, rake_v, key, rake_value))
+                print("{}: rake_max ({}) is lower than {} ({})".format(self.name, rake_v, key, rake_value))
+                self.logger.warning("rake_max is lower than rake min or rake best")
         self._rake_max = rake_v
 
     @rake_min.setter
@@ -746,7 +754,9 @@ class CfmFault:
         rake_v = self.validate_rake(rake)
         for key, rake_value in zip(["rake_max", "rake_best"], [self.rake_max, self.rake_best]):
             if rake_value is not None and bearing_geq(rake_v, rake_value):
-                print("{}: rake_min ({:.2f}) is higher than {} ({:.2f})".format(self.name, rake_v, key, rake_value))
+                #print("{}: rake_min ({:.2f}) is higher than {} ({:.2f})".format(self.name, rake_v, key, rake_value))
+                print("{}: rake_min ({}) is higher than {} ({})".format(self.name, rake_v, key, rake_value))
+                self.logger.warning("rake_min is higher than rake max or rake best")
         self._rake_min = rake_v
 
     @staticmethod
@@ -781,6 +791,7 @@ class CfmFault:
     def validate_rake_sense(self):
         if any([a is None for a in (self.rake_best, self.sense_dom)]):
             print("{}: Insufficient data to compare rake and slip sense".format(self.name))
+            self.logger.warning("Insufficient data to compare rake and slip sense")
             return
         else:
             dominant_range = dominant_rake_ranges[self.sense_dom]
@@ -789,6 +800,7 @@ class CfmFault:
                 print("{}: Supplied rake ({:.2f} deg) differs from dominant slip sense ({})".format(self.name,
                                                                                                     self.rake_best,
                                                                                                     self.sense_dom))
+                self.logger.warning("Supplied rake differs from dominant slip sense")
             if self.sense_sec is not None:
                 sec_range = secondary_rake_ranges[self.sense_sec]
                 if not all([bearing_geq(self.rake_best, sec_range[0]),
@@ -796,6 +808,7 @@ class CfmFault:
                     print("{}: Supplied rake ({:.2f} deg) inconsistent with sec slip sense ({})".format(self.name,
                                                                                                         self.rake_best,
                                                                                                         self.sense_sec))
+                    self.logger.warning("Supplied rake inconsistent with sec slip sense")
 
     @property
     def sr_best(self):
