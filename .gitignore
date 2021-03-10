@@ -111,6 +111,12 @@ ENV/
 env.bak/
 venv.bak/
 
+#data
+data/
+
+#tests
+src/eq_fault_geom/geomio/run_s.py
+
 
 # Spyder project settings
 .spyderproject

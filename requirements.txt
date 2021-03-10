@@ -5,11 +5,13 @@ cftime==1.2.1
 click==7.1.2
 click-plugins==1.1.1
 cligj==0.5.0
+coverage==5.3
 cycler==0.10.0
 Fiona==1.8.13.post1
 geopandas==0.8.1
 importlib-metadata==1.7.0
 kiwisolver==1.2.0
+lxml==4.5.2
 matplotlib==3.3.1
 meshio==4.1.0
 munch==2.5.0
@@ -28,4 +30,6 @@ rasterio==1.1.5
 Shapely==1.7.1
 six==1.15.0
 snuggs==1.4.7
+testfixtures==6.14.2
+xmlunittest==0.5.0
 zipp==3.1.0

@@ -9,6 +9,10 @@ import numpy as np
 from shapely.geometry import LineString, Polygon, MultiPolygon
 from shapely.ops import unary_union
 from pyproj import Transformer
+#import warnings
+
+import logging
+#from src.eq_fault_geom.geomio.cfm_logger import CfmLogger
 
 transformer = Transformer.from_crs(2193, 4326, always_xy=True)
 transform_wgs2nztm = Transformer.from_crs(4326, 2193, always_xy=True)
@@ -279,14 +283,11 @@ class CfmMultiFault:
     Class to hold data for multiple faults, read in from shapefile (and hopefully also tsurfaces)
     """
 
-    def __init__(self, fault_geodataframe: gpd.GeoDataFrame, exclude_regions: List[Polygon] = None):
+    def __init__(self, fault_geodataframe: gpd.GeoDataFrame, exclude_regions: list = None):
+        self.logger = logging.getLogger('cmf_logger')
+        self.check_input1(fault_geodataframe)
+        self.check_input2(fault_geodataframe)
 
-        for field in required_fields:
-            if field not in fault_geodataframe.columns:
-                raise ValueError("Missing required field: {}".format(field))
-        for field in expected_fields:
-            if field not in fault_geodataframe.columns:
-                print("Warning: missing expected field: {}".format(field))
         self._faults = []
 
         # If appropriate, clip out data that fall within exclude_regions
@@ -327,12 +328,27 @@ class CfmMultiFault:
 
         self.df = sorted_df
 
+
+
+    def check_input1(self, fault_geodataframe):
+        for field in required_fields:
+            if field not in fault_geodataframe.columns:
+                raise ValueError("Missing required field: {}".format(field))
+
+    def check_input2(self, fault_geodataframe):
+        for field in expected_fields:
+            if field not in fault_geodataframe.columns:
+                print("Warning: missing expected field: ({})".format(field))
+                self.logger.warning("missing expected field")
+
+
     @property
     def faults(self):
         return self._faults
 
     def add_fault(self, series: pd.Series):
-        self.faults.append(CfmFault.from_series(series, parent_multifault=self))
+        cfmFault = CfmFault.from_series(series, parent_multifault=self)
+        self.faults.append(cfmFault)
 
     @property
     def fault_numbers(self):
@@ -374,7 +390,9 @@ class CfmMultiFault:
                 i += 1
 
         # Awkward way of getting the xml file to be written in a way that's easy to read.
-        xml_dom = minidom.parseString(ElemTree.tostring(opensha_element, encoding="UTF-8", xml_declaration=True))
+        #elmstr = ElemTree.tostring(opensha_element, encoding="UTF-8", xml_declaration=True)
+        elmstr = ElemTree.tostring(opensha_element, encoding="UTF-8")
+        xml_dom = minidom.parseString(elmstr)
         pretty_xml_str = xml_dom.toprettyxml(indent="  ", encoding="utf-8")
 
         return pretty_xml_str
@@ -388,7 +406,9 @@ class CfmMultiFault:
         """
 
         with open(filename, "wb") as f:
-            f.write(self.to_opensha_xml(exclude_subduction=exclude_subduction))
+            opnxml = self.to_opensha_xml(exclude_subduction=exclude_subduction)
+            f.write(opnxml)
+
 
 
 class CfmFault:
@@ -398,6 +418,7 @@ class CfmFault:
         :param parent_multifault:
         """
         # Attributes usually provided in CFM trace shapefile
+        self.logger = logging.getLogger('cmf_logger')
         self._parent = parent_multifault
         self._depth_best, self._depth_min, self._depth_max = (None,) * 3
         self._dip_best, self._dip_min, self._dip_max, self._dip_dir, self._dip_dir_str = (None,) * 5
@@ -412,6 +433,7 @@ class CfmFault:
         # Attributes required for OpenSHA XML
         self._section_id, self._section_name = (None,) * 2
         self._dip_sigma, self._rake_sigma, self._sr_sigma = (None,) * 3
+
 
     # Depths
     @property
@@ -431,12 +453,16 @@ class CfmFault:
         depth_v = self.validate_depth(depth)
         if self.depth_min is not None:
             if depth_v < self.depth_min:
-                print("{}: depth_best ({:.2f}) lower than depth_min ({:.2f})".format(self.name, depth_v,
-                                                                                     self.depth_min))
+                # print("{}: depth_best ({:.2f}) lower than depth_min ({:.2f})".format(self.name, depth_v,
+                #                                                                       self.depth_min))
+                self.logger.warning("depth_best lower than depth_min")
+
         if self.depth_max is not None:
             if depth_v > self.depth_max:
-                print("{}: depth_best ({:.2f}) greater than depth_max ({:.2f})".format(self.name, depth_v,
-                                                                                       self.depth_best))
+                # print("{}: depth_best ({:.2f}) greater than depth_max ({:.2f})".format(self.name, depth_v,
+                #                                                                        self.depth_max))
+
+                self.logger.warning("depth_best greater than depth_max ")
         self._depth_best = depth_v
 
     @depth_max.setter
@@ -445,6 +471,8 @@ class CfmFault:
         for depth_value in (self.depth_min, self.depth_best):
             if depth_value is not None and depth_v < depth_value:
                 print("Warning: depth_max lower than either depth_min or depth_best ({})".format(self.name))
+                self.logger.warning("depth_max lower than either depth_min or depth_best")
+
         self._depth_max = depth_v
 
     @depth_min.setter
@@ -453,6 +481,7 @@ class CfmFault:
         for depth_value in (self.depth_max, self.depth_best):
             if depth_value is not None and depth_v > depth_value:
                 print("Warning: depth_min higher than either depth_max or depth_best ({})".format(self.name))
+                self.logger.warning("depth_min higher than either depth_max or depth_best")
         self._depth_min = depth_v
 
     def validate_depth(self, depth: Union[float, int]):
@@ -486,10 +515,10 @@ class CfmFault:
         dip_v = self.validate_dip(dip)
         if self.dip_min is not None:
             if dip_v < self.dip_min:
-                print("{}: dip_best ({.2f}) lower than dip_min ({.2f})".format(self.name, dip_v, self.dip_min))
+                print("{}: dip_best ({}) lower than dip_min ({})".format(self.name, dip_v, self.dip_min))
         if self.dip_max is not None:
             if dip_v > self.dip_max:
-                print("{}: dip_best ({.2f}) greater than dip_max ({.2f})".format(self.name, dip_v, self.dip_max))
+                print("{}: dip_best ({}) greater than dip_max ({})".format(self.name, dip_v, self.dip_max))
         self._dip_best = dip_v
 
     @dip_max.setter
@@ -497,7 +526,8 @@ class CfmFault:
         dip_v = self.validate_dip(dip)
         for key, dip_value in zip(["dip_min", "dip_best"], [self.dip_min, self.dip_best]):
             if dip_value is not None and bearing_leq(dip_v, dip_value):
-                print("{}: dip_max ({:.2f}) is lower than {} ({:.2f})".format(self.name, dip_v, key, dip_value))
+                print("{}: dip_max ({}) is lower than {} ({})".format(self.name, dip_v, key, dip_value))
+                self.logger.warning("dip_max is lower than dip min or dip best")
         self._dip_max = dip_v
 
     @dip_min.setter
@@ -505,7 +535,10 @@ class CfmFault:
         dip_v = self.validate_dip(dip)
         for key, dip_value in zip(["dip_max", "dip_best"], [self.dip_max, self.dip_best]):
             if dip_value is not None and bearing_geq(dip_v, dip_value):
-                print("{}: dip_min ({:.2f}) is higher than {} ({:.2f})".format(self.name, dip_v, key, dip_value))
+                #print("{}: dip_min ({:.2f}) is higher than {} ({:.2f})".format(self.name, dip_v, key, dip_value)) #{:.2f} formatting is not working
+                print("{}: dip_min ({}) is higher than {} ({})".format(self.name, dip_v, key, dip_value))
+                self.logger.warning("dip_min is higher than dip max or dip best")
+
         self._dip_min = dip_v
 
     @property
@@ -515,7 +548,7 @@ class CfmFault:
         elif not any([a is None for a in (self.dip_min, self.dip_max)]):
             return root_mean_square(np.array([self.dip_min, self.dip_max]))
         else:
-            raise ValueError("Insufficient data to calculate dip_sigma!")
+            raise ValueError("Insufficient data to calculate dip_sigma!")   # <= not sure if you need this step as this will go through validate_dip
 
     @dip_dir_str.setter
     def dip_dir_str(self, dip_dir: str):
@@ -554,6 +587,7 @@ class CfmFault:
             if self.nztm_trace is not None and self._dip_dir is None:
                 dip_dir = calculate_dip_direction(self.nztm_trace)
                 self._dip_dir = dip_dir
+            self.logger.warning("Insufficient information to validate dip direction")
             return
         else:
             # Trace and dip direction
@@ -567,9 +601,10 @@ class CfmFault:
                         self._nztm_trace = reverse_line(self.nztm_trace)
                         self._dip_dir = reversed_dd
                     else:
-                        # print("{}: Supplied trace and dip direction {} are inconsistent: expect either {:.1f} or {:.1f} "
-                        #       "dip azimuth. Please check...".format(self.name, self.dip_dir_str,
-                        #                                             dd_from_trace, reversed_dd))
+                        print("{}: Supplied trace and dip direction {} are inconsistent: expect either {:.1f} or {:.1f} "
+                              "dip azimuth. Please check...".format(self.name, self.dip_dir_str,
+                        self.logger.warning("Supplied trace and dip direction are inconsistent")
+                        dd_from_trace, reversed_dd))
                         self._dip_dir = dd_from_trace
                 else:
                     self._dip_dir = dd_from_trace
