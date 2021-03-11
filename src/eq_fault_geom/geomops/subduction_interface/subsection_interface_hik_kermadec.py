@@ -6,6 +6,10 @@ from shapely.geometry import LineString, Polygon, Point
 import os
 import pandas as pd
 
+from pyproj import Transformer
+
+transformer = Transformer.from_crs(4326, 2193, always_xy=True)
+
 # Location of data directory: TODO need to decide whether data are installed with project
 data_dir = "/Users/arh79/PycharmProjects/eq-fault-geom/data/"
 # data_dir = os.path.expanduser("~/DEV/GNS/eq-fault-geom/data/")
@@ -22,21 +26,32 @@ Workflow:
 """
 
 
-def fit_plane_svd(point_cloud: np.ndarray):
+def fit_plane_to_points(points: np.ndarray, eps: float=1.0e-5):
     """
-    Fit a plane through points using numpy SVD
-    :param point_cloud: (n x 3) numpy array
-    :return: unit vector of normal to plane
+    Find best-fit plane through a set of points, after first insuring the plane goes through
+    the mean (centroid) of all the points in the array. This is probably better than my
+    initial method, since the SVD is only over a 3x3 array (rather than the num_pointsxnum_points
+    array).
+    Returned values are:
+        plane_normal:  Normal vector to plane (A, B, C)
+        plane_origin:  Point on plane that may be considered as the plane origin
     """
-    # Find centre of point cloud
-    g = point_cloud.sum(axis=0) / point_cloud.shape[0]
+    # Compute plane origin and subract it from the points array.
+    plane_origin = np.mean(points, axis=0)
+    x = points - plane_origin
 
-    # run SVD
-    u, s, vh = np.linalg.svd(point_cloud - g)
+    # Dot product to yield a 3x3 array.
+    moment = np.dot(x.T, x)
 
-    # unitary normal vector
-    u_norm = vh[2, :]
-    return u_norm
+    # Extract single values from SVD computation to get normal.
+    plane_normal = np.linalg.svd(moment)[0][:,-1]
+    small = np.where(np.abs(plane_normal) < eps)
+    plane_normal[small] = 0.0
+    plane_normal /= np.linalg.norm(plane_normal)
+    if (plane_normal[-1] < 0.0):
+        plane_normal *= -1.0
+
+    return plane_normal, plane_origin
 
 """
 Read and pre process data from files, set parameters for meshing
@@ -44,11 +59,11 @@ Read and pre process data from files, set parameters for meshing
 
 # Relevant quantities that control tile distribution
 # Swath profile half width; for making (slightly) smoothed profiles/cross-sections through interface.
-profile_half_width = 15000
+profile_half_width = 5000
 # Spacing between down-dip profiles (and therefore tiles) in the along-strike direction
-profile_spacing = 30000
+profile_spacing = 10000
 # Max distance to select points to fit
-search_radius = 3e4
+search_radius = 1e4
 
 
 # Read in grid from subduction interface
@@ -62,6 +77,14 @@ all_xyz_with_nans = np.vstack((x_grid.flatten(), y_grid.flatten(), z.flatten()))
 
 # Remove points where z is NaN
 all_xyz = all_xyz_with_nans[~np.isnan(all_xyz_with_nans).any(axis=1)]
+
+slip_deficit_file = os.path.join(data_dir, "subduction/slip_deficit_hikurangi_1.0.txt")
+slip_deficit_df = pd.read_csv(slip_deficit_file, delim_whitespace=True)
+slip_deficit_nztm_x, slip_deficit_nztm_y = transformer.transform(slip_deficit_df["#longitude"].to_list(),
+                                                                 slip_deficit_df["latitude"].to_list())
+slip_deficit_nztm_array = np.vstack((slip_deficit_nztm_x, slip_deficit_nztm_y, slip_deficit_df.depth_km.to_numpy() * 1000.,
+                                     slip_deficit_df["slip_deficit_mm/yr"].to_numpy(),
+                                     slip_deficit_df["uncertainty_mm/yr"].to_numpy())).T
 
 # Read shapefile: line that gives overall strike of subduction zone
 # Included so that easy to fiddle with in GIS
@@ -166,8 +189,22 @@ top_traces = []
 dips = []
 top_depths = []
 bottom_depths = []
+slip_deficit_list = []
 
 for centre_point in all_points_array:
+    # Find slip deficit
+    sd_difference_vectors = slip_deficit_nztm_array[:, :3] - centre_point
+    sd_all_values = slip_deficit_nztm_array[:, 3]
+    sd_distances = np.linalg.norm(sd_difference_vectors, axis=1)
+    nearby_sd = slip_deficit_nztm_array[sd_distances < profile_half_width]
+    if nearby_sd.size:
+        gaussian_sigma = profile_half_width/3.
+        sd_weights = np.exp(-1 * sd_distances[sd_distances < profile_half_width] / (2 * gaussian_sigma))
+        sd_values = sd_all_values[sd_distances < profile_half_width]
+        sd_average = np.average(sd_values, weights=sd_weights)
+    else:
+        sd_average = -1000.
+
     # Find distances of all points from centre
     difference_vectors = all_xyz - centre_point
     distances = np.linalg.norm(difference_vectors, axis=1)
@@ -175,7 +212,7 @@ for centre_point in all_points_array:
     small_cloud = all_xyz[distances < search_radius]
 
     # Normal to plane
-    normal_i = fit_plane_svd(small_cloud)
+    normal_i, _ = fit_plane_to_points(small_cloud)
 
     # Make sure normal points up
     if normal_i[-1] < 0:
@@ -204,8 +241,7 @@ for centre_point in all_points_array:
 
     top_trace = LineString(poly_ls[1:-1])
     top_traces.append(top_trace)
-
-
+    slip_deficit_list.append(sd_average)
 
     all_tile_ls.append(np.array(poly_ls))
 
@@ -222,7 +258,9 @@ outlines_wgs = outlines.to_crs(epsg=4326)
 outlines_wgs.to_file("hk_tile_outlines.shp")
 
 all_points = [Point(row) for row in all_points_array]
-centres = gpd.GeoSeries(all_points, crs="epsg:2193")
+centres = gpd.GeoDataFrame(slip_deficit_list, geometry=all_points, crs="epsg:2193", columns=["slip_deficit"])
+
+centres_wgs = centres.to_crs(4326)
 centres.to_file("hk_tile_centres.shp")
 all_points_z = np.array([point.z for point in all_points])
 
@@ -231,13 +269,14 @@ top_trace_gs = gpd.GeoSeries(top_traces, crs="epsg:2193")
 top_trace_wgs = top_trace_gs.to_crs(epsg=4326)
 
 out_alternative_ls = []
-for trace, dip, top_depth, bottom_depth in zip(top_trace_wgs.geometry, dips, top_depths, bottom_depths):
+for trace, dip, top_depth, bottom_depth, slip_deficit_i in zip(top_trace_wgs.geometry, dips, top_depths, bottom_depths,
+                                                               slip_deficit_list):
     x0, y0 = trace.coords[0][:-1]
     x1, y1 = trace.coords[1][:-1]
     if y1 > y0:
-        out_alternative_ls.append([x1, y1, x0, y0, dip, top_depth / -1000, bottom_depth / -1000])
+        out_alternative_ls.append([x1, y1, x0, y0, dip, top_depth / -1000, bottom_depth / -1000, slip_deficit_i])
     else:
-        out_alternative_ls.append([x0, y0, x1, y1, dip, top_depth / -1000, bottom_depth / -1000])
+        out_alternative_ls.append([x0, y0, x1, y1, dip, top_depth / -1000, bottom_depth / -1000, slip_deficit_i])
 
 out_alternative_array = np.array(out_alternative_ls)
 index_array = np.array(all_indices)
@@ -247,7 +286,7 @@ index_array = np.array(all_indices)
 
 # #Dataframes provides simpler formatting options
 df_indices  = pd.DataFrame(index_array, columns=["along_strike_index", "down_dip_index"])
-df_tiles    = pd.DataFrame(out_alternative_array, columns=["lon1(deg)", "lat1(deg)", "lon2(deg)", "lat2(deg)", "dip (deg)", "top_depth (km)", "bottom_depth (km)"])
+df_tiles    = pd.DataFrame(out_alternative_array, columns=["lon1(deg)", "lat1(deg)", "lon2(deg)", "lat2(deg)", "dip (deg)", "top_depth (km)", "bottom_depth (km)", "slip_deficit (mm/yr)"])
 df_centres  = pd.DataFrame(all_points_array, columns=["cen_x", "cen_y", "cen_z"])
 
 #extend alt_out with tile geometry
@@ -258,11 +297,5 @@ df_tiles = pd.merge(df_tiles, df_tiles_xyz, left_index=True, right_index=True)
 df_tiles_out = pd.merge(df_indices, df_tiles, left_index=True, right_index=True)
 df_centres_out = pd.merge(df_indices, df_centres, left_index=True, right_index=True)
 
-df_tiles_out.to_csv(os.path.join(output_dir, "hk_tile_parameters_30.csv"), index=False)
-df_centres_out.to_csv(os.path.join(output_dir, "hk_tile_centres_nztm_30.csv"), index=False)
-
-# # TODO set to be installable by pip, to avoid these stupid path strings
-# np.savetxt(data_dir + "subduction/tile_parameters.txt", out_array_with_indices, fmt="%.6f",
-#            delimiter=" ", header=header_str)
-# np.savetxt(data_dir + "subduction/tile_centres_nztm.txt", centres_with_indices, fmt="%.6f",
-#            delimiter=" ", header=centre_header)
+df_tiles_out.to_csv(os.path.join(output_dir, "hk_tile_parameters_10.csv"), index=False)
+df_centres_out.to_csv(os.path.join(output_dir, "hk_tile_centres_nztm_10.csv"), index=False)

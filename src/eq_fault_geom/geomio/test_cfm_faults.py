@@ -53,7 +53,7 @@ class test_cfm_faults(TestCase, XmlTestMixin):
         for i,fault in self.sorted_df.iterrows():
             length = len(self.cmf_faults.faults)
             self.cmf_faults.add_fault(fault)
-            self.assertEqual(length+1, len(self.cmf_faults.faults))
+            self.assertAlmostEqual(length+1, len(self.cmf_faults.faults))
 
 
         #assert False
