@@ -203,7 +203,12 @@ for centre_point in all_points_array:
         sd_values = sd_all_values[sd_distances < profile_half_width]
         sd_average = np.average(sd_values, weights=sd_weights)
     else:
-        sd_average = -1000.
+        if centre_point[1] < 5500000.:
+            sd_average = -1000.
+        elif centre_point[1] < 6100000.:
+            sd_average = -2000.
+        else:
+            sd_average = -3000.
 
     # Find distances of all points from centre
     difference_vectors = all_xyz - centre_point
