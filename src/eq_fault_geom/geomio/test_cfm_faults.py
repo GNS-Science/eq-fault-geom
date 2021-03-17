@@ -235,7 +235,7 @@ class test_cfm_fault(TestCase):
 
         dip_dir = None
         self.cmf_fault.dip_dir_str = dip_dir
-        self.assertEqual(self.cmf_fault.dip_dir, 330.15406806735234)
+        self.assertAlmostEqual(self.cmf_fault.dip_dir, 330.15406806735234)
 
 
     #still working on this
@@ -267,7 +267,7 @@ class test_cfm_fault(TestCase):
         self.cmf_fault.dip_dir_str = dip_dir
 
         self.cmf_fault.validate_dip_direction()
-        self.assertEqual(self.cmf_fault.dip_dir, 150.15406806735643)
+        self.assertAlmostEqual(self.cmf_fault.dip_dir, 150.15406806735643)
 
         dip_dir = None
         self.cmf_fault.dip_dir_str = dip_dir
