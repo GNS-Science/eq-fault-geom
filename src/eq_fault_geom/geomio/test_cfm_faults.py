@@ -54,7 +54,7 @@ class test_cfm_faults(TestCase, XmlTestMixin):
         for i,fault in self.sorted_df.iterrows():
             length = len(self.cmf_faults.faults)
             self.cmf_faults.add_fault(fault)
-            self.assertEqual(length+1, len(self.cmf_faults.faults))
+            self.assertAlmostEqual(length+1, len(self.cmf_faults.faults))
 
 
         #assert False
@@ -101,7 +101,7 @@ class test_cfm_fault(TestCase):
 
     # def test_depth_best(self): => This gets tested by depth_max and depth_min
     #     self.cmf_fault.depth_best = 5.5
-    #     self.assertEqual(self.cmf_fault.depth_best, 5.5)
+    #     self.assertAlmostEqual(self.cmf_fault.depth_best, 5.5)
     #     self.cmf_fault._depth_best = 3.3
     #     self.assertNotEqual(self.cmf_fault.depth_best, 5.5)
     #
@@ -119,7 +119,7 @@ class test_cfm_fault(TestCase):
 
     def test_depth_max(self):
         self.cmf_fault.depth_max = 10.5
-        self.assertEqual(self.cmf_fault.depth_max, 10.5)
+        self.assertAlmostEqual(self.cmf_fault.depth_max, 10.5)
 
         self.cmf_fault._depth_max = 8.6
         self.assertNotEqual(self.cmf_fault.depth_max, 10.5)
@@ -145,7 +145,7 @@ class test_cfm_fault(TestCase):
 
     def test_depth_min(self):
         self.cmf_fault.depth_min = 30.5
-        self.assertEqual(self.cmf_fault.depth_min, 30.5)
+        self.assertAlmostEqual(self.cmf_fault.depth_min, 30.5)
 
         self.cmf_fault._depth_min = 1.5
         self.assertNotEqual(self.cmf_fault.depth_min, 10.5)
@@ -176,7 +176,7 @@ class test_cfm_fault(TestCase):
 
     def test_dip_max(self):
         self.cmf_fault.dip_max = 10.5
-        self.assertEqual(self.cmf_fault.dip_max, 10.5)
+        self.assertAlmostEqual(self.cmf_fault.dip_max, 10.5)
 
         self.cmf_fault._dip_max = 8.6
         self.assertNotEqual(self.cmf_fault.dip_max, 10.5)
@@ -198,7 +198,7 @@ class test_cfm_fault(TestCase):
 
     def test_dip_min(self):
         self.cmf_fault.dip_min = 10.5
-        self.assertEqual(self.cmf_fault.dip_min, 10.5)
+        self.assertAlmostEqual(self.cmf_fault.dip_min, 10.5)
 
         self.cmf_fault._dip_min = 8.6
         self.assertNotEqual(self.cmf_fault.dip_min, 10.5)
@@ -241,12 +241,12 @@ class test_cfm_fault(TestCase):
     #still working on this
     def test_dip_sigma(self):
         self.cmf_fault._dip_sigma = 8.6
-        self.assertEqual(self.cmf_fault.dip_sigma, 8.6)
+        self.assertAlmostEqual(self.cmf_fault.dip_sigma, 8.6)
 
         self.cmf_fault._dip_sigma = None
         self.cmf_fault.dip_min = 16
         self.cmf_fault.dip_max = 25
-        self.assertEqual(self.cmf_fault.dip_sigma, 4.5)
+        self.assertAlmostEqual(self.cmf_fault.dip_sigma, 4.5)
 
         # I think no need to test the Valuerror here as it should satisfy the validate_dip() function
         # self.cmf_fault.dip_min = None
@@ -312,13 +312,13 @@ class test_cfm_fault(TestCase):
         reponseX, reponseY = self.cmf_fault.wgs_trace.coords.xy
         response = reponseX.tolist()
         actual = [172.81975618060406, 172.78381840673984, 172.7622924223485]
-        self.assertEqual(response, actual)
+        self.assertAlmostEqual(response, actual)
 
 
 
     def test_rake_max(self):
         self.cmf_fault.rake_max = 40.5
-        self.assertEqual(self.cmf_fault.rake_max, 40.5)
+        self.assertAlmostEqual(self.cmf_fault.rake_max, 40.5)
 
         self.cmf_fault._rake_max = 20.1
         self.assertNotEqual(self.cmf_fault.rake_max, 40.5)
@@ -338,7 +338,7 @@ class test_cfm_fault(TestCase):
             )
     def test_rake_min(self):
         self.cmf_fault.rake_min = 10.5
-        self.assertEqual(self.cmf_fault.rake_min, 10.5)
+        self.assertAlmostEqual(self.cmf_fault.rake_min, 10.5)
 
         self.cmf_fault._rake_min = 8.6
         self.assertNotEqual(self.cmf_fault.rake_min, 10.5)
