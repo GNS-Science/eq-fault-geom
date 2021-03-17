@@ -396,14 +396,12 @@ class test_cfm_fault(TestCase):
     # def test_sense_dom(self):
     #     assert False
     #
-    # def test_sense_dom(self):
-    #     assert False
+
     #
     # def test_sense_sec(self):
     #     assert False
     #
-    # def test_sense_sec(self):
-    #     assert False
+
     #
     # def test_rake_to_opensha(self):
     #     assert False
