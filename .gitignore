@@ -111,6 +111,16 @@ ENV/
 env.bak/
 venv.bak/
 
+#data
+data/
+
+#tests
+src/eq_fault_geom/geomio/run_s.py
+<<<<<<< HEAD
+
+=======
+>>>>>>> parent of cb42706... modifying gitignore to avoid the older test file.
+
 
 # Spyder project settings
 .spyderproject
