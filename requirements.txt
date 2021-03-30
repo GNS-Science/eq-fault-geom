@@ -11,7 +11,7 @@ Fiona==1.8.13.post1
 geopandas==0.8.1
 importlib-metadata==1.7.0
 kiwisolver==1.2.0
-lxml==4.6.2
+lxml==4.6.3
 matplotlib==3.3.1
 meshio==4.1.0
 munch==2.5.0
