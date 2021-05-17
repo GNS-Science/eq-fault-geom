@@ -34,14 +34,14 @@ valid_rake_range = [0, 360]
 valid_sr_range = [0, 60]
 
 # These fields aren't crucial but are in some versions of the relevant files
-expected_fields = ['Depth_Best', 'Depth_Max', 'Depth_Min', 'Dip_pref',
-                   'Dip_Dir', 'Dip_Max', 'Dip_Min', 'Name',
+expected_fields = ['D90', 'Depth_max', 'Depth_min', 'Dip_pref',
+                   'Dip_dir', 'Dip_max', 'Dip_min', 'Name',
                    'Qual_Code', 'Rake_pref', 'Rake_plus', 'Rake_minus', 'Dom_sense',
                    'Sub_sense', 'Source1_1', 'Source2', 'SR_pref', 'SR_Max', 'SR_Min',
                    'geometry']
 
 # There will be a mess if these fields don't exist
-required_fields = ['Name', 'Number', 'geometry']
+required_fields = ['Name', 'Fault_ID', 'geometry']
 
 
 def smallest_difference(value1, value2):
@@ -164,7 +164,7 @@ def calculate_dip_direction(line: LineString):
     if num_neg > num_pos:
         bearing += 180.
 
-    dip_direction = bearing + 90.
+    dip_direction = bearing
     # Ensure strike is between zero and 360 (bearing)
     while dip_direction < 0:
         dip_direction += 360.
@@ -283,7 +283,8 @@ class CfmMultiFault:
     Class to hold data for multiple faults, read in from shapefile (and hopefully also tsurfaces)
     """
 
-    def __init__(self, fault_geodataframe: gpd.GeoDataFrame, exclude_regions: list = None):
+    def __init__(self, fault_geodataframe: gpd.GeoDataFrame, exclude_region_polygons: list = None,
+                 exclude_region_min_sr: float = 1.8, include_names: list = None, depth_type: str = "D90"):
         self.logger = logging.getLogger('cmf_logger')
         self.check_input1(fault_geodataframe)
         self.check_input2(fault_geodataframe)
@@ -291,12 +292,12 @@ class CfmMultiFault:
         self._faults = []
 
         # If appropriate, clip out data that fall within exclude_regions
-        if exclude_regions is not None:
-            assert isinstance(exclude_regions, list)
-            assert all([isinstance(a, Polygon) for a in exclude_regions])
+        if exclude_region_polygons is not None:
+            assert isinstance(exclude_region_polygons, list)
+            assert all([isinstance(a, Polygon) for a in exclude_region_polygons])
             exclude_regions_nztm = []
             # Check that polygons are in NZTM, otherwise convert them
-            for poly in exclude_regions:
+            for poly in exclude_region_polygons:
                 x, y = poly.exterior.xy
                 if all(np.array(y) < 0):
                     # Assume in WGS (Lon Lat), convert to NZTM
@@ -311,6 +312,15 @@ class CfmMultiFault:
             for i, row in fault_geodataframe.iterrows():
                 if not any([row.geometry.within(poly) for poly in exclude_regions_nztm]):
                     trimmed_fault_ls.append(row)
+                elif row["SR_pref"] >= exclude_region_min_sr:
+                    trimmed_fault_ls.append(row)
+                elif include_names is not None:
+                    if row["Name"] in include_names:
+                        trimmed_fault_ls.append(row)
+                    else:
+                        print(row["Name"])
+                else:
+                    print(row["Name"])
             trimmed_fault_gdf = gpd.GeoDataFrame(trimmed_fault_ls)
 
         else:
@@ -324,7 +334,7 @@ class CfmMultiFault:
         # Reset index to line up with alphabetical sorting
         sorted_df = sorted_df.reset_index(drop=True)
         for i, row in sorted_df.iterrows():
-            self.add_fault(row)
+            self.add_fault(row, depth_type=depth_type)
 
         self.df = sorted_df
 
@@ -346,8 +356,8 @@ class CfmMultiFault:
     def faults(self):
         return self._faults
 
-    def add_fault(self, series: pd.Series):
-        cfmFault = CfmFault.from_series(series, parent_multifault=self)
+    def add_fault(self, series: pd.Series, depth_type: str = "D90"):
+        cfmFault = CfmFault.from_series(series, parent_multifault=self, depth_type=depth_type)
         self.faults.append(cfmFault)
 
     @property
@@ -358,10 +368,10 @@ class CfmMultiFault:
             return []
 
     @classmethod
-    def from_shp(cls, filename: str, exclude_regions: List[Polygon] = None):
+    def from_shp(cls, filename: str, exclude_region_polygons: List[Polygon] = None, depth_type: str = "D90"):
         assert os.path.exists(filename)
         fault_geodataframe = gpd.GeoDataFrame.from_file(filename)
-        multi_fault = cls(fault_geodataframe, exclude_regions=exclude_regions)
+        multi_fault = cls(fault_geodataframe, exclude_region_polygons=exclude_region_polygons, depth_type=depth_type)
         return multi_fault
 
     def to_opensha_xml(self, exclude_subduction: bool = True, buffer_width: float = 5000.,
@@ -420,7 +430,7 @@ class CfmFault:
         # Attributes usually provided in CFM trace shapefile
         self.logger = logging.getLogger('cmf_logger')
         self._parent = parent_multifault
-        self._depth_best, self._depth_min, self._depth_max = (None,) * 3
+        self._depth_best, self._depth_min, self._depth_max, self._depth_stdev = (None,) * 4
         self._dip_best, self._dip_min, self._dip_max, self._dip_dir, self._dip_dir_str = (None,) * 5
         self._name = None
         self._number, self._qual_code = (None,) * 2
@@ -492,6 +502,16 @@ class CfmFault:
             #                                                                            valid_depth_range[1]))
             pass
         return depth_positive
+
+    @property
+    def depth_stdev(self):
+        return self._depth_stdev
+
+    @depth_stdev.setter
+    def depth_stdev(self, dstd):
+        assert isinstance(dstd, (int, float))
+        assert dstd >= 0.
+        self._depth_stdev = dstd
 
     # Dips
     @property
@@ -894,19 +914,22 @@ class CfmFault:
         return self._parent
 
     @classmethod
-    def from_series(cls, series: pd.Series, parent_multifault: CfmMultiFault = None):
+    def from_series(cls, series: pd.Series, parent_multifault: CfmMultiFault = None, depth_type: str = "D90"):
         assert isinstance(series, pd.Series)
+        assert depth_type in ["D90", "Dfcomb"]
         fault = cls(parent_multifault=parent_multifault)
         fault.name = series["Name"]
-        fault.number = int(series["Number"])
-        fault.dip_best, fault.dip_min, fault.dip_max = series["Dip_pref"], series["Dip_Min"], series["Dip_Max"]
+        fault.number = int(series["Fault_ID"])
+        fault.dip_best, fault.dip_min, fault.dip_max = series["Dip_pref"], series["Dip_min"], series["Dip_max"]
         fault.nztm_trace = series["geometry"]
-        fault.dip_dir_str = series["Dip_Dir"]
+        fault.dip_dir_str = series["Dip_dir"]
         fault.rake_best, fault.rake_min, fault.rake_max = series["Rake_pref"], series["Rake_minus"], series["Rake_plus"]
         fault.sense_dom, fault.sense_sec = series["Dom_sense"], series["Sub_sense"]
-        fault.sr_best, fault.sr_min, fault.sr_max = series["SR_pref"], series["SR_Min"], series["SR_Max"]
-        fault.depth_best, fault.depth_min, fault.depth_max = series["Depth_Best"], series["Depth_Min"], series[
-            "Depth_Max"]
+        fault.sr_best, fault.sr_min, fault.sr_max = series["SR_pref"], series["SR_min"], series["SR_max"]
+        if depth_type == "D90":
+            fault.depth_best, fault.depth_stdev = series["D90"], series["D90_stdev"]
+        else:
+            fault.depth_best, fault.depth_stdev = series["Dfcomb"], series["Dfcomb_std"]
         return fault
 
     @classmethod
@@ -932,7 +955,7 @@ class CfmFault:
         attribute_dic = {"sectionId": "{:d}".format(section_id),
                          "sectionName": self.name,
                          "aveLongTermSlipRate": "{:.1f}".format(self.sr_best),
-                         "slipRateStDev": "{:.1f}".format(self.sr_sigma),
+                         "slipRateStdDev": "{:.1f}".format(self.sr_sigma),
                          "aveDip": "{:.1f}".format(self.dip_best),
                          "aveRake": "{:.1f}".format(self.rake_to_opensha(self.rake_best)),
                          "aveUpperDepth": "0.0",
