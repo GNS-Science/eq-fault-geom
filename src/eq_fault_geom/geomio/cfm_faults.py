@@ -201,6 +201,8 @@ def fault_trace_xml(geometry: LineString, section_name: str, z: Union[float, int
     x, y = geometry.xy
     # Loop through addis each coordinate as sub element
     for x_i, y_i in zip(x, y):
+        if x_i <=0.:
+            x_i += 360.
         loc_element = ElemTree.Element("Location", attrib={"Latitude": ll_float_str.format(y_i),
                                                            "Longitude": ll_float_str.format(x_i),
                                                            "Depth": ll_float_str.format(z)})
