@@ -15,7 +15,7 @@ class test_cfm_faults(TestCase, XmlTestMixin):
 
     def setUp(self):
 
-        self.filename = "/Users/arh79/PycharmProjects/eq-fault-geom/src/eq_fault_geom/geomio/cfm_linework/NZ_CFM_v0_6_160221.shp"
+        self.filename = "../../../data/cfm_linework/NZ_CFM_v0_6_160221.shp"
         self.fault_geodataframe = gpd.GeoDataFrame.from_file(self.filename)
         self.cmf_faults = CfmMultiFault(self.fault_geodataframe)
         self.logger = logging.getLogger('cmf_logger')
@@ -91,7 +91,7 @@ class test_cfm_fault(TestCase):
         self.cmf_fault = CfmFault()
         self.logger = logging.getLogger('cmf_logger')
 
-        self.filename = "/Users/arh79/PycharmProjects/eq-fault-geom/src/eq_fault_geom/geomio/cfm_linework/NZ_CFM_v0_6_160221.shp"
+        self.filename = "../../../data/cfm_linework/NZ_CFM_v0_6_160221.shp"
         self.fault_geodataframe = gpd.GeoDataFrame.from_file(self.filename)
         self.cmf_faults = CfmMultiFault(self.fault_geodataframe)
         # Sort alphabetically by name
