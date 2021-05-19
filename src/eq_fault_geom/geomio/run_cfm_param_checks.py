@@ -36,10 +36,8 @@ poly_ls.append(matt_poly)
 buffer_width = 5000.
 
 # Read and write data
-data_d90_all = CfmMultiFault.from_shp(shp, exclude_region_polygons=poly_ls, depth_type="D90")
+data_d90_all = CfmMultiFault.from_shp(shp, depth_type="D90")
 data_d90_notvz = CfmMultiFault.from_shp(shp, exclude_region_polygons=poly_ls, depth_type="D90")
-data_dfcomb_all = CfmMultiFault.from_shp(shp, exclude_region_polygons=poly_ls, depth_type="Dfcomb")
-data_dfcomb_notvz = CfmMultiFault.from_shp(shp, exclude_region_polygons=poly_ls, depth_type="Dfcomb")
 
 
 
@@ -47,8 +45,8 @@ data_dfcomb_notvz = CfmMultiFault.from_shp(shp, exclude_region_polygons=poly_ls,
 # polygons_gdf = gpd.GeoDataFrame(geometry=polygons, crs=4326)
 # polygons_gdf.to_file("fault_buffers.shp")
 
-for file_handle, dataset in zip(["d90_all", "d90_no_tvz", "dfcomb_all", "dfcomb_no_tvz"],
-                               [data_d90_all, data_d90_notvz, data_dfcomb_all, data_dfcomb_notvz]):
+for file_handle, dataset in zip(["d90_all", "d90_no_tvz"],
+                               [data_d90_all, data_d90_notvz]):
     xml_buffer = dataset.to_opensha_xml(exclude_subduction=True, buffer_width=buffer_width, write_buffers=False)
     with open("cfm_0_9_{}.xml".format(file_handle), "wb") as f:
         f.write(xml_buffer)
