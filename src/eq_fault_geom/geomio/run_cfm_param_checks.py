@@ -8,25 +8,25 @@ from eq_fault_geom.geomio.cfm_faults import CfmMultiFault
        # "Shapefiles/NZ_CFM_v0_5_290121.shp")
 shp = "/Users/arh79/PycharmProjects/eq-fault-geom/src/eq_fault_geom/geomio/cfm_linework/NZ_CFM_v0_9_070521.shp"
 
-# # Polygons to exclude faults from XML
-# exclude_shp = "/Users/arh79/PycharmProjects/eq-fault-geom/src/eq_fault_geom/geomio/test_bop.shp"
-# exclude_df = gpd.GeoDataFrame.from_file(exclude_shp)
-# # Change to WGS for use with Matt's TVZ polygon
-# exclude_df_wgs = exclude_df.to_crs(epsg=4326)
-# poly_ls = list(exclude_df_wgs.geometry)
-#
-# # To read in Matt's TVZ polygon
-# matt_array = np.array([[-36.17, 177.25],
-#                        [-36.17, 178.14],
-#                        [-37.53, 177.31],
-#                        [-39.78, 175.38],
-#                        [-39.78, 174.97],
-#                        [-39.22, 175.29],
-#                        [-36.17, 177.25]])
-#
-# # Polygon requires lon lat (rather than lat lon)
-# matt_poly = Polygon([(row[1], row[0]) for row in matt_array])
-# poly_ls.append(matt_poly)
+# Polygons to exclude faults from XML
+exclude_shp = "../../../data/cfm_shapefile/bop_exclusion.gpkg"
+exclude_df = gpd.GeoDataFrame.from_file(exclude_shp)
+# Change to WGS for use with Matt's TVZ polygon
+exclude_df_wgs = exclude_df.to_crs(epsg=4326)
+poly_ls = list(exclude_df_wgs.geometry.explode())
+
+# To read in Matt's TVZ polygon
+matt_array = np.array([[-36.17, 177.25],
+                       [-36.17, 178.14],
+                       [-37.53, 177.31],
+                       [-39.78, 175.38],
+                       [-39.78, 174.97],
+                       [-39.22, 175.29],
+                       [-36.17, 177.25]])
+
+# Polygon requires lon lat (rather than lat lon)
+matt_poly = Polygon([(row[1], row[0]) for row in matt_array])
+poly_ls.append(matt_poly)
 
 # # Write to shapefile for visualization in GIS
 # matt_gs = gpd.GeoSeries(matt_poly[0], crs=4326)
@@ -37,7 +37,9 @@ buffer_width = 5000.
 
 # Read and write data
 data_d90_all = CfmMultiFault.from_shp(shp, depth_type="D90")
-data_d90_notvz = CfmMultiFault.from_shp(shp, exclude_region_min_sr=1.8, depth_type="D90")
+print(poly_ls)
+data_d90_notvz = CfmMultiFault.from_shp(shp, exclude_region_polygons=poly_ls,
+                                        exclude_region_min_sr=1.8, depth_type="D90")
 
 
 
