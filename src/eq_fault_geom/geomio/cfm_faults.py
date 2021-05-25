@@ -370,10 +370,12 @@ class CfmMultiFault:
             return []
 
     @classmethod
-    def from_shp(cls, filename: str, exclude_region_polygons: List[Polygon] = None, depth_type: str = "D90"):
+    def from_shp(cls, filename: str, exclude_region_polygons: List[Polygon] = None, depth_type: str = "D90",
+                 exclude_region_min_sr: float = 1.8):
         assert os.path.exists(filename)
         fault_geodataframe = gpd.GeoDataFrame.from_file(filename)
-        multi_fault = cls(fault_geodataframe, exclude_region_polygons=exclude_region_polygons, depth_type=depth_type)
+        multi_fault = cls(fault_geodataframe, exclude_region_polygons=exclude_region_polygons,
+                          exclude_region_min_sr=exclude_region_min_sr, depth_type=depth_type)
         return multi_fault
 
     def to_opensha_xml(self, exclude_subduction: bool = True, buffer_width: float = 5000.,
