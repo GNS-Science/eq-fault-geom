@@ -54,7 +54,7 @@ if __name__ == "__main__":
 
         cfm.loc[cfm.Name == fault.Name, "D90"] = depth
 
-    cfm.to_file("cfm_0_9_stirling_depths.shp")
+    cfm.to_file("../../../data/cfm_shapefile/cfm_0_9_stirling_depths.gpkg", driver="GPKG")
 
 
 
