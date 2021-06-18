@@ -9,9 +9,10 @@ import pandas as pd
 from pyproj import Transformer
 
 transformer = Transformer.from_crs(4326, 2193, always_xy=True)
+trans_inv = Transformer.from_crs(2193, 4326, always_xy=True)
 
 # Location of data directory: TODO need to decide whether data are installed with project
-data_dir = "/Users/arh79/PycharmProjects/eq-fault-geom/data/"
+data_dir = "../../../../data/"
 # data_dir = os.path.expanduser("~/DEV/GNS/eq-fault-geom/data/")
 output_dir = os.getcwd()
 
@@ -53,6 +54,31 @@ def fit_plane_to_points(points: np.ndarray, eps: float=1.0e-5):
 
     return plane_normal, plane_origin
 
+
+def coupling(lat: float):
+    if lat < -32.5:
+        return 0.2
+    elif lat > -31.:
+        return 0.5
+    else:
+        # Linear gradient in the middle between two uniform areas
+        return 0.2 + (0.5 - 0.2) * (lat - -32.5) / (-31. - -32.5)
+
+def convergence(lat: float):
+    """
+    Linear between 49 mm/yr at -39 to 85 mm/yr at -27.5
+    """
+    north_lat = -27.5
+    south_lat = -39.
+    south_conv = 49.
+    north_conv = 85.
+
+    return south_conv + (north_conv - south_conv) * (lat - south_lat) / (north_lat - south_lat)
+
+def kermadec_slip_rate(lat: float):
+    return convergence(lat) * coupling(lat)
+
+
 """
 Read and pre process data from files, set parameters for meshing
 """
@@ -63,7 +89,7 @@ profile_half_width = 5000
 # Spacing between down-dip profiles (and therefore tiles) in the along-strike direction
 profile_spacing = 10000
 # Max distance to select points to fit
-search_radius = 1e4
+search_radius = 1.e4
 
 
 # Read in grid from subduction interface
@@ -191,7 +217,10 @@ top_depths = []
 bottom_depths = []
 slip_deficit_list = []
 
+kermadec_min_lat = -39.
+
 for centre_point in all_points_array:
+    centre_wgs = trans_inv.transform(*centre_point)
     # Find slip deficit
     sd_difference_vectors = slip_deficit_nztm_array[:, :3] - centre_point
     sd_all_values = slip_deficit_nztm_array[:, 3]
@@ -202,6 +231,9 @@ for centre_point in all_points_array:
         sd_weights = np.exp(-1 * sd_distances[sd_distances < profile_half_width] / (2 * gaussian_sigma))
         sd_values = sd_all_values[sd_distances < profile_half_width]
         sd_average = np.average(sd_values, weights=sd_weights)
+    elif centre_wgs[1] > kermadec_min_lat:
+        # print(centre_wgs)
+        sd_average = kermadec_slip_rate(centre_wgs[1])
     else:
         sd_average = -1000.
 
