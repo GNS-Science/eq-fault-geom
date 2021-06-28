@@ -6,7 +6,7 @@ import os
 import geopandas as gpd
 import pandas as pd
 import numpy as np
-from shapely.geometry import LineString, Polygon, MultiPolygon
+from shapely.geometry import LineString, Polygon, MultiPolygon, MultiLineString
 from shapely.ops import unary_union
 from pyproj import Transformer
 #import warnings
@@ -42,6 +42,14 @@ expected_fields = ['D90', 'Depth_max', 'Depth_min', 'Dip_pref',
 
 # There will be a mess if these fields don't exist
 required_fields = ['Name', 'Fault_ID', 'geometry']
+
+def decimal_deg_to_minutes(decdeg: float):
+    if decdeg < 0.:
+        decdeg *= -1
+    deg = np.int(np.floor(decdeg))
+    mins = 60. * (decdeg - deg)
+
+    return deg, mins
 
 
 def smallest_difference(value1, value2):
@@ -280,13 +288,18 @@ def polygons_to_shapely_format(supplied_polygons: Union[str, Polygon, MultiPolyg
     return poly_ls
 
 
+
+
+
+
 class CfmMultiFault:
     """
     Class to hold data for multiple faults, read in from shapefile (and hopefully also tsurfaces)
     """
 
     def __init__(self, fault_geodataframe: gpd.GeoDataFrame, exclude_region_polygons: list = None,
-                 exclude_region_min_sr: float = 1.8, include_names: list = None, depth_type: str = "D90"):
+                 exclude_region_min_sr: float = 1.8, include_names: list = None, depth_type: str = "D90",
+                 exclude_aus: bool = True, exclude_zero: bool = True):
         self.logger = logging.getLogger('cmf_logger')
         self.check_input1(fault_geodataframe)
         self.check_input2(fault_geodataframe)
@@ -309,6 +322,8 @@ class CfmMultiFault:
                 else:
                     # Assume NZTM, do nothing
                     exclude_regions_nztm.append(poly)
+
+
             # Make list of faults outside region
             trimmed_fault_ls = []
             for i, row in fault_geodataframe.iterrows():
@@ -330,6 +345,20 @@ class CfmMultiFault:
 
         # Temporarily avoid having to deal with zero dips
         trimmed_fault_gdf = trimmed_fault_gdf[trimmed_fault_gdf.Dip_pref > 0]
+
+        if exclude_zero:
+            to_exclude = trimmed_fault_gdf[trimmed_fault_gdf.SR_max == 0.]
+            for iname in list(to_exclude.Name):
+                print(iname)
+            trimmed_fault_gdf = trimmed_fault_gdf[trimmed_fault_gdf.SR_max > 0.]
+
+        if exclude_aus:
+            to_exclude = trimmed_fault_gdf[trimmed_fault_gdf.Fault_stat == "A-US"]
+            for iname in list(to_exclude.Name):
+                print(iname)
+            trimmed_fault_gdf = trimmed_fault_gdf[trimmed_fault_gdf.Fault_stat != "A-US"]
+
+
 
         # Sort alphabetically by name
         sorted_df = trimmed_fault_gdf.sort_values("Name")
@@ -423,7 +452,45 @@ class CfmMultiFault:
             opnxml = self.to_opensha_xml(exclude_subduction=exclude_subduction)
             f.write(opnxml)
 
+    def to_hybrid_csv(self, output_csv: str, exclude_subduction: bool = True):
+        pass
+        """
+        :param output_csv: File to write output
+        :param exclude_subduction: Do not include subduction zones from CFM
+        """
+        columns = ["FaultName", "DipMin", "DipBest", "DipMax", "DipDir", "DepthMin", "DepthBest", "DepthMax",
+                   "Top", "SRMin", "SRBest", "SRMax"]
 
+        output_str = ",".join(columns) + "\n"
+        num_columns = len(columns)
+
+        for fault in self.faults:
+            # Identify subduction zone sources to include (only if exclude_subduction is True)
+            exclude_condition = all([exclude_subduction, any([name in fault.name.lower()
+                                                              for name in subduction_names])])
+            # Add XML for fault
+            if not exclude_condition:
+                output_str += fault.fault_to_hybrid_csv(num_columns=num_columns)
+
+        with open(output_csv, "w") as outfile:
+            outfile.write(output_str)
+
+    def to_gmt(self, output_csv: str, exclude_subduction: bool = True):
+        """
+        :param output_csv: File to write output
+        :param exclude_subduction: Do not include subduction zones from CFM
+        """
+        out_str = ""
+        for fault in self.faults:
+            # Identify subduction zone sources to include (only if exclude_subduction is True)
+            exclude_condition = all([exclude_subduction, any([name in fault.name.lower()
+                                                              for name in subduction_names])])
+            # Add XML for fault
+            if not exclude_condition:
+                out_str += fault.trace_to_gmt()
+
+        with open(output_csv, "w") as out_file:
+            out_file.write(out_str)
 
 class CfmFault:
     def __init__(self, parent_multifault: CfmMultiFault = None):
@@ -701,8 +768,11 @@ class CfmFault:
 
     @nztm_trace.setter
     def nztm_trace(self, trace: LineString):
-        assert isinstance(trace, LineString)
-        self._nztm_trace = trace
+        if isinstance(trace, LineString):
+            self._nztm_trace = trace
+        else:
+            assert isinstance(trace, MultiLineString)
+            self._nztm_trace = list(trace)[0]
 
     @property
     def wgs_trace(self):
@@ -982,3 +1052,56 @@ class CfmFault:
             fault_element.append(polygon_element)
 
         return fault_element
+
+    def trace_to_gmt(self):
+        x, y = self.wgs_trace.xy
+        out_str = f">{self.name}\n"
+        for xi, yi in zip(x, y):
+            out_str += f"{xi:.6f} {yi:.6f}\n"
+        return out_str
+
+    @staticmethod
+    def pad_commas(in_string: str, num_columns: int):
+        num_commas = in_string.count(",")
+        out_str = in_string.strip() + (num_columns - num_commas -1) * "," + "\n"
+        return out_str
+
+    def to_segment(self, x0: float, y0: float, x1: float, y1: float, num_columns: int):
+        x0_deg, x0_mins = decimal_deg_to_minutes(x0)
+        y0_deg, y0_mins = decimal_deg_to_minutes(y0)
+        x1_deg, x1_mins = decimal_deg_to_minutes(x1)
+        y1_deg, y1_mins = decimal_deg_to_minutes(y1)
+
+        seg_str = (f"{self.name},{x0_deg:d},{x0_mins:.1f},{y0_deg:d},{y0_mins:.1f},"
+                   f"{x1_deg:d},{x1_mins:.1f},{y1_deg:d},{y1_mins:.1f}\n")
+        return self.pad_commas(seg_str, num_columns)
+
+    def trace_to_hybrid_csv(self, num_columns: int):
+        """
+
+        """
+
+        x, y = self.wgs_trace.xy
+        coord_ls = list(self.wgs_trace.coords)
+
+        out_str = self.pad_commas(f"{self.name},{len(coord_ls) - 1}D", num_columns=num_columns)
+        out_str += self.to_segment(x[0], y[0], x[-1], y[-1], num_columns=num_columns)
+
+        for c0, c1 in zip(coord_ls[:-1], coord_ls[1:]):
+            out_str += self.to_segment(c0[0], c0[1], c1[0], c1[1], num_columns=num_columns)
+
+        out_str += self.pad_commas(f"{self.name},-1\n", num_columns=num_columns)
+        return out_str
+
+    def fault_to_hybrid_csv(self, num_columns: int):
+        data_str = (f"{self.name},{int(self.dip_min):d},{int(self.dip_best):d},{int(self.dip_max):d},"
+                    f"{self.dip_dir:.1f},{self.depth_best - self.depth_stdev:.1f},{self.depth_best:.1f},"
+                    f"{self.depth_best + self.depth_stdev:.1f},0.0,{self.sr_min:.2f},{self.sr_best:.2f},"
+                    f"{self.sr_max:.2f}\n")
+        data_str += self.trace_to_hybrid_csv(num_columns=num_columns)
+        return data_str
+
+
+
+
+

@@ -38,6 +38,9 @@ buffer_width = 5000.
 data_d90_all = CfmMultiFault.from_shp(shp, depth_type="D90")
 data_d90_notvz = CfmMultiFault.from_shp(shp, exclude_region_polygons=poly_ls,
                                         exclude_region_min_sr=1.8, depth_type="D90")
+data_d90_notvz.to_gmt("cfm_0_9_traces.gmt")
+
+data_d90_notvz.to_hybrid_csv("cfm_0_9_hybrid.csv")
 
 
 
