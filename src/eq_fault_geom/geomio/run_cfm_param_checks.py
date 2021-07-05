@@ -4,16 +4,15 @@ from shapely.geometry import Polygon
 
 from eq_fault_geom.geomio.cfm_faults import CfmMultiFault
 
-# shp = ("/Users/arh79/PycharmProjects/eq-fault-geom/src/eq_fault_geom/geomio/CFM_v0_5_Review/"
-       # "Shapefiles/NZ_CFM_v0_5_290121.shp")
-shp = "/Users/arh79/PycharmProjects/eq-fault-geom/src/eq_fault_geom/geomio/cfm_linework/NZ_CFM_v0_6_160221.shp"
+shp = "../../../data/cfm_shapefile/cfm_0_9.gpkg"
+# shp = "../../../data/cfm_shapefile/cfm_0_9_stirling_depths.gpkg"
 
 # Polygons to exclude faults from XML
-exclude_shp = "/Users/arh79/PycharmProjects/eq-fault-geom/src/eq_fault_geom/geomio/test_bop.shp"
+exclude_shp = "../../../data/cfm_shapefile/bop_exclusion.gpkg"
 exclude_df = gpd.GeoDataFrame.from_file(exclude_shp)
 # Change to WGS for use with Matt's TVZ polygon
 exclude_df_wgs = exclude_df.to_crs(epsg=4326)
-poly_ls = list(exclude_df_wgs.geometry)
+poly_ls = list(exclude_df_wgs.geometry.explode())
 
 # To read in Matt's TVZ polygon
 matt_array = np.array([[-36.17, 177.25],
@@ -36,16 +35,20 @@ poly_ls.append(matt_poly)
 buffer_width = 5000.
 
 # Read and write data
-data = CfmMultiFault.from_shp(shp, exclude_regions=poly_ls)
-polygons = [fault.combined_buffer_polygon(buffer_width) for fault in data.faults if abs(fault.down_dip_vector[-1]) > 1.e-3]
-polygons_gdf = gpd.GeoDataFrame(geometry=polygons, crs=4326)
-polygons_gdf.to_file("fault_buffers.shp")
+data_d90_all = CfmMultiFault.from_shp(shp, depth_type="D90")
+data_d90_notvz = CfmMultiFault.from_shp(shp, exclude_region_polygons=poly_ls,
+                                        exclude_region_min_sr=1.8, depth_type="D90")
 
 
-xml_buffer = data.to_opensha_xml(exclude_subduction=True, buffer_width=buffer_width, write_buffers=True)
-with open("cfm_0_3_buffer.xml", "wb") as f:
-    f.write(xml_buffer)
 
-xml_nobuffer = data.to_opensha_xml(exclude_subduction=True, buffer_width=buffer_width, write_buffers=False)
-with open("cfm_0_3_no_buffer.xml", "wb") as f:
-    f.write(xml_nobuffer)
+# polygons = [fault.combined_buffer_polygon(buffer_width) for fault in data.faults if abs(fault.down_dip_vector[-1]) > 1.e-3]
+# polygons_gdf = gpd.GeoDataFrame(geometry=polygons, crs=4326)
+# polygons_gdf.to_file("fault_buffers.shp")
+
+for file_handle, dataset in zip(["d90_all", "d90_no_tvz"],
+                               [data_d90_all, data_d90_notvz]):
+    xml_buffer = dataset.to_opensha_xml(exclude_subduction=True, buffer_width=buffer_width, write_buffers=False)
+    # with open("cfm_0_9_{}.xml".format(file_handle), "wb") as f:
+    #     f.write(xml_buffer)
+    with open("cfm_0_9_{}_stirling_depths.xml".format(file_handle), "wb") as f:
+        f.write(xml_buffer)
