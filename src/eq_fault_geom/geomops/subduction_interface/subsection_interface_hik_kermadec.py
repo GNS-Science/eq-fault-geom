@@ -93,7 +93,7 @@ search_radius = 1.e4
 
 
 # Read in grid from subduction interface
-tiff = os.path.join(data_dir, "subduction/kermadec_lt50k.grd")
+tiff = os.path.join(data_dir, "subduction/kermadec_lt50k_trimmed.grd")
 # print(data_dir, tiff, Path(tiff).resolve())
 x, y, z = read_gmt_grid(tiff)
 
@@ -280,7 +280,11 @@ for centre_point in all_points_array:
 """
 Write tiles to files
 """
-all_polygons = [Polygon(array_i) for array_i in all_tile_ls]
+all_polygons = []
+for array_i in all_tile_ls:
+    if np.sum(~np.isnan(array_i)) > 0:
+        all_polygons.append(Polygon(array_i))
+# all_polygons = [Polygon(array_i) for array_i in all_tile_ls]
 
 
 outlines = gpd.GeoSeries(all_polygons, crs="epsg:2193")
