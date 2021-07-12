@@ -288,10 +288,6 @@ def polygons_to_shapely_format(supplied_polygons: Union[str, Polygon, MultiPolyg
     return poly_ls
 
 
-
-
-
-
 class CfmMultiFault:
     """
     Class to hold data for multiple faults, read in from shapefile (and hopefully also tsurfaces)
