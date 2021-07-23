@@ -54,63 +54,14 @@ def fit_plane_to_points(points: np.ndarray, eps: float=1.0e-5):
 
     return plane_normal, plane_origin
 
+# Locations of points where slip rate changes
+east_cape = Point(179.680, -38.081)
+start_0_2 = Point(180.0, -37.00)
+end_0_2 = Point(-177.3995, -32.5061)
+start_0_5 = Point(-176.673, -31.016)
+convergence_start = Point(179.098, -39.014)
+convergence_end = Point(-174.162, -27.508)
 
-def coupling(lat: float):
-    if lat < -32.5:
-        return 0.2
-    elif lat > -31.:
-        return 0.5
-    else:
-        # Linear gradient in the middle between two uniform areas
-        return 0.2 + (0.5 - 0.2) * (lat - -32.5) / (-31. - -32.5)
-
-def convergence(lat: float):
-    """
-    Linear between 49 mm/yr at -39 to 85 mm/yr at -27.5
-    """
-    north_lat = -27.5
-    south_lat = -39.
-    south_conv = 49.
-    north_conv = 85.
-
-    return south_conv + (north_conv - south_conv) * (lat - south_lat) / (north_lat - south_lat)
-
-def kermadec_slip_rate(lat: float):
-    return convergence(lat) * coupling(lat)
-
-
-"""
-Read and pre process data from files, set parameters for meshing
-"""
-
-# Relevant quantities that control tile distribution
-# Swath profile half width; for making (slightly) smoothed profiles/cross-sections through interface.
-profile_half_width = 5000
-# Spacing between down-dip profiles (and therefore tiles) in the along-strike direction
-profile_spacing = 10000
-# Max distance to select points to fit
-search_radius = 1.e4
-
-
-# Read in grid from subduction interface
-tiff = os.path.join(data_dir, "subduction/kermadec_lt50k_trimmed.grd")
-# print(data_dir, tiff, Path(tiff).resolve())
-x, y, z = read_gmt_grid(tiff)
-
-# Turn grid into xyz (n x 3) array, by making x and y grids and flattening them.
-x_grid, y_grid = np.meshgrid(x, y)
-all_xyz_with_nans = np.vstack((x_grid.flatten(), y_grid.flatten(), z.flatten())).T
-
-# Remove points where z is NaN
-all_xyz = all_xyz_with_nans[~np.isnan(all_xyz_with_nans).any(axis=1)]
-
-slip_deficit_file = os.path.join(data_dir, "subduction/slip_deficit_hikurangi_1.0.txt")
-slip_deficit_df = pd.read_csv(slip_deficit_file, delim_whitespace=True)
-slip_deficit_nztm_x, slip_deficit_nztm_y = transformer.transform(slip_deficit_df["#longitude"].to_list(),
-                                                                 slip_deficit_df["latitude"].to_list())
-slip_deficit_nztm_array = np.vstack((slip_deficit_nztm_x, slip_deficit_nztm_y, slip_deficit_df.depth_km.to_numpy() * 1000.,
-                                     slip_deficit_df["slip_deficit_mm/yr"].to_numpy(),
-                                     slip_deficit_df["uncertainty_mm/yr"].to_numpy())).T
 
 # Read shapefile: line that gives overall strike of subduction zone
 # Included so that easy to fiddle with in GIS
@@ -128,6 +79,88 @@ overall_strike = 90 - np.degrees(np.arctan2(overall_vec[1], overall_vec[0]))
 along_overall = overall_vec / np.linalg.norm(overall_vec)
 # Rotate to give unit vector perpendicular to strike
 across_vec = np.matmul(np.array([[0, -1], [1, 0]]), along_overall)
+
+
+def point_dist(point: Point):
+    return np.dot(along_overall, np.array(transformer.transform(point.x, point.y)))
+
+
+east_cape_dist = point_dist(east_cape)
+start_0_2_dist = point_dist(start_0_2)
+end_0_2_dist = point_dist(end_0_2)
+start_0_5_dist = point_dist(start_0_5)
+convergence_start_dist = point_dist(convergence_start)
+convergence_end_dist = point_dist(convergence_end)
+
+def coupling(dist: float):
+    assert dist >= east_cape_dist
+    if dist < start_0_2_dist:
+        return 0.2 * (dist - east_cape_dist) / (start_0_2_dist - east_cape_dist)
+    elif dist < end_0_2_dist:
+        return 0.2
+
+    elif dist > start_0_5_dist:
+        return 0.5
+    else:
+        # Linear gradient in the middle between two uniform areas
+        return 0.2 + (0.5 - 0.2) * (dist - end_0_2_dist) / (start_0_5_dist - end_0_2_dist)
+
+def convergence(dist: float):
+    """
+    Linear between 49 mm/yr at -39 to 85 mm/yr at -27.5
+    """
+    south_conv = 49.
+    north_conv = 85.
+
+    return south_conv + (north_conv - south_conv) * (dist - convergence_start_dist) / (convergence_end_dist -
+                                                                                       convergence_start_dist)
+
+
+def convergence_dist(dist):
+    pass
+
+def kermadec_slip_rate(dist: float, modelled_value: float = 0.):
+    if modelled_value > 0.:
+        return modelled_value + convergence(dist) * coupling(dist) * (dist - east_cape_dist) / (start_0_2_dist -
+                                                                                                east_cape_dist)
+    else:
+        return convergence(dist) * coupling(dist)
+
+
+"""
+Read and pre process data from files, set parameters for meshing
+"""
+
+# Relevant quantities that control tile distribution
+# Swath profile half width; for making (slightly) smoothed profiles/cross-sections through interface.
+profile_half_width = 15000
+# Spacing between down-dip profiles (and therefore tiles) in the along-strike direction
+profile_spacing = 30000
+# Max distance to select points to fit
+search_radius = 3.e4
+
+preferred_depth = -5.e4
+
+
+# Read in grid from subduction interface
+tiff = os.path.join(data_dir, "subduction/kermadec_lt75_trimmed.grd")
+# print(data_dir, tiff, Path(tiff).resolve())
+x, y, z = read_gmt_grid(tiff)
+
+# Turn grid into xyz (n x 3) array, by making x and y grids and flattening them.
+x_grid, y_grid = np.meshgrid(x, y)
+all_xyz_with_nans = np.vstack((x_grid.flatten(), y_grid.flatten(), z.flatten())).T
+
+# Remove points where z is NaN
+all_xyz = all_xyz_with_nans[~np.isnan(all_xyz_with_nans).any(axis=1)]
+
+slip_deficit_file = os.path.join(data_dir, "subduction/trench_creep_hik_slipdeficit.txt")
+slip_deficit_df = pd.read_csv(slip_deficit_file, delim_whitespace=True)
+slip_deficit_nztm_x, slip_deficit_nztm_y = transformer.transform(slip_deficit_df["#long"].to_list(),
+                                                                 slip_deficit_df["lat"].to_list())
+slip_deficit_nztm_array = np.vstack((slip_deficit_nztm_x, slip_deficit_nztm_y, slip_deficit_df.depth.to_numpy() * 1000.,
+                                     slip_deficit_df["slip_deficit_mm/yr"].to_numpy(),
+                                     slip_deficit_df["uncertainty_mm/yr"].to_numpy())).T
 
 """
 Calculate locations of tile centres
@@ -191,9 +224,11 @@ for along_index, along in enumerate(along_spaced):
             interpolated_x = np.array([point.x for point in interpolated_points])
             interpolated_z_values = np.array([point.y for point in interpolated_points])
 
+            close_to_preferred = np.argmin(np.abs(interpolated_z_values - preferred_depth)) + 1
+
             # Calculate NZTM coordinates of tile centres
-            point_xys = np.array([row_end + across_i * across_vec for across_i in interpolated_x])
-            point_xyz = np.vstack((point_xys.T, interpolated_z_values)).T
+            point_xys = np.array([row_end + across_i * across_vec for across_i in interpolated_x[:close_to_preferred]])
+            point_xyz = np.vstack((point_xys.T, interpolated_z_values[:close_to_preferred])).T
 
             patch_indices = [(along_index, across_index) for across_index in range(point_xyz.shape[0])]
 
@@ -221,6 +256,7 @@ kermadec_min_lat = -39.
 
 for centre_point in all_points_array:
     centre_wgs = trans_inv.transform(*centre_point)
+    centre_dist = point_dist(Point(*centre_wgs[:-1]))
     # Find slip deficit
     sd_difference_vectors = slip_deficit_nztm_array[:, :3] - centre_point
     sd_all_values = slip_deficit_nztm_array[:, 3]
@@ -231,9 +267,11 @@ for centre_point in all_points_array:
         sd_weights = np.exp(-1 * sd_distances[sd_distances < profile_half_width] / (2 * gaussian_sigma))
         sd_values = sd_all_values[sd_distances < profile_half_width]
         sd_average = np.average(sd_values, weights=sd_weights)
-    elif centre_wgs[1] > kermadec_min_lat:
+        if centre_dist > east_cape_dist:
+            sd_average = kermadec_slip_rate(float(centre_dist), modelled_value=sd_average)
+    elif centre_dist > start_0_2_dist:
         # print(centre_wgs)
-        sd_average = kermadec_slip_rate(centre_wgs[1])
+        sd_average = kermadec_slip_rate(float(centre_dist))
     else:
         if centre_point[1] < 5500000.:
             sd_average = -1000.
@@ -293,8 +331,6 @@ for array_i in all_tile_ls:
 
 
 outlines = gpd.GeoSeries(all_polygons, crs="epsg:2193")
-outlines.to_file("hk_tile_outlines.shp")
-
 outlines_wgs = outlines.to_crs(epsg=4326)
 outlines_wgs.to_file("hk_tile_outlines.shp")
 
@@ -338,5 +374,5 @@ df_tiles = pd.merge(df_tiles, df_tiles_xyz, left_index=True, right_index=True)
 df_tiles_out = pd.merge(df_indices, df_tiles, left_index=True, right_index=True)
 df_centres_out = pd.merge(df_indices, df_centres, left_index=True, right_index=True)
 
-df_tiles_out.to_csv(os.path.join(output_dir, "hk_tile_parameters_10.csv"), index=False)
-df_centres_out.to_csv(os.path.join(output_dir, "hk_tile_centres_nztm_10.csv"), index=False)
+df_tiles_out.to_csv(os.path.join(output_dir, "hk_tile_parameters_30.csv"), index=False)
+df_centres_out.to_csv(os.path.join(output_dir, "hk_tile_centres_nztm_30.csv"), index=False)
