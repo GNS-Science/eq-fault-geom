@@ -155,10 +155,26 @@ def calculate_dip_direction(line: LineString):
     x, y = line.xy
     x, y = np.array(x), np.array(y)
     # Calculate gradient of line in 2D
-    p = np.polyfit(x, y, 1)
-    gradient = p[0]
-    # Gradient to bearing
-    bearing = 180 - np.degrees(np.arctan2(gradient, 1))
+    px = np.polyfit(x, y, 1, full=True)
+    gradient_x = px[0][0]
+
+    if len(px[1]):
+        res_x = px[1][0]
+    else:
+        res_x = 0
+
+    py = np.polyfit(y, x, 1, full=True)
+    gradient_y = py[0][0]
+    if len(py[1]):
+        res_y = py[1][0]
+    else:
+        res_y = 0
+
+    if res_x <= res_y:
+        # Gradient to bearing
+        bearing = 180 - np.degrees(np.arctan2(gradient_x, 1))
+    else:
+        bearing = 180 - np.degrees(np.arctan2(1/gradient_y, 1))
     bearing_vector = np.array([np.sin(np.radians(bearing)), np.cos(np.radians(bearing))])
 
     # Determine whether line object fits strike convention
@@ -668,7 +684,7 @@ class CfmFault:
         """
         return self._dip_dir
 
-    def validate_dip_direction(self):
+    def validate_dip_direction(self, tolerance: float = 10.):
         """
         Compares dip direction string (e.g. NW) with
         :return:
@@ -686,20 +702,36 @@ class CfmFault:
             dd_from_trace = calculate_dip_direction(self.nztm_trace)
             if self.dip_dir_str != "SUBVERTICAL AND VARIABLE":
                 min_dd_range, max_dd_range = dip_direction_ranges[self.dip_dir_str]
-                if not all([min_dd_range <= dd_from_trace, dd_from_trace <= max_dd_range]):
-                    reversed_dd = reverse_bearing(dd_from_trace)
-                    if all([min_dd_range <= reversed_dd, reversed_dd <= max_dd_range]):
-                        self._nztm_trace = reverse_line(self.nztm_trace)
-                        self._dip_dir = reversed_dd
+                if self.dip_dir_str != "N":
+                    if not all([min_dd_range - tolerance <= dd_from_trace, dd_from_trace <= max_dd_range + tolerance]):
+                        reversed_dd = reverse_bearing(dd_from_trace)
+                        if all([min_dd_range - tolerance <= reversed_dd, reversed_dd <= max_dd_range + tolerance]):
+                            self._nztm_trace = reverse_line(self.nztm_trace)
+                            self._dip_dir = reversed_dd
+                        else:
+                            print("{}: Supplied trace and dip direction {} are inconsistent: expect either {:.1f}"
+                                  "or {:.1f} dip azimuth. Please check...".format(self.name, self.dip_dir_str,
+                                                                                  dd_from_trace, reversed_dd))
+                            self.logger.warning("Supplied trace and dip direction are inconsistent")
+
+                            self._dip_dir = dd_from_trace
+
                     else:
-                        print("{}: Supplied trace and dip direction {} are inconsistent: expect either {:.1f} or {:.1f} "
-                              "dip azimuth. Please check...".format(self.name, self.dip_dir_str,
-                                                                    dd_from_trace, reversed_dd))
+                        self._dip_dir = dd_from_trace
+                else:
+                    reversed_dd = reverse_bearing(dd_from_trace)
+                    if any([315. - tolerance <= dds for dds in [dd_from_trace, reversed_dd]]):
+                        self._dip_dir = max([dd_from_trace, reversed_dd])
+                    elif any([dds <= 45. + tolerance for dds in [dd_from_trace, reversed_dd]]):
+                        self._dip_dir = max([dd_from_trace, reversed_dd])
+                    else:
+                        print("{}: Supplied trace and dip direction {} are inconsistent: expect either {:.1f} or {:.1f}"
+                              " dip azimuth. Please check...".format(self.name, self.dip_dir_str,
+                                                                     dd_from_trace, reversed_dd))
                         self.logger.warning("Supplied trace and dip direction are inconsistent")
 
                         self._dip_dir = dd_from_trace
-                else:
-                    self._dip_dir = dd_from_trace
+
             else:
                 self._dip_dir = dd_from_trace
             return
@@ -756,10 +788,6 @@ class CfmFault:
             return Polygon([[xi, yi] for xi, yi in zip(wgs_x, wgs_y)])
         else:
             return combined_buffer
-
-
-
-
 
     # Trace
     @property
