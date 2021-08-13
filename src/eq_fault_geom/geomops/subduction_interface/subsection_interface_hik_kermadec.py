@@ -54,8 +54,9 @@ def fit_plane_to_points(points: np.ndarray, eps: float=1.0e-5):
 
     return plane_normal, plane_origin
 
+
 # Locations of points where slip rate changes
-east_cape = Point(179.680, -38.081)
+east_cape = Point(178.9916, -39.1775)
 start_0_2 = Point(180.0, -37.00)
 end_0_2 = Point(-177.3995, -32.5061)
 start_0_5 = Point(-176.673, -31.016)
@@ -84,6 +85,8 @@ across_vec = np.matmul(np.array([[0, -1], [1, 0]]), along_overall)
 def point_dist(point: Point):
     return np.dot(along_overall, np.array(transformer.transform(point.x, point.y)))
 
+def point_dist_nztm(point: Point):
+    return float(np.dot(along_overall, np.array([point.x, point.y])))
 
 east_cape_dist = point_dist(east_cape)
 start_0_2_dist = point_dist(start_0_2)
@@ -95,7 +98,7 @@ convergence_end_dist = point_dist(convergence_end)
 def coupling(dist: float):
     assert dist >= east_cape_dist
     if dist < start_0_2_dist:
-        return 0.2 * (dist - east_cape_dist) / (start_0_2_dist - east_cape_dist)
+        return 0.2  # * (dist - east_cape_dist) / (start_0_2_dist - east_cape_dist)
     elif dist < end_0_2_dist:
         return 0.2
 
@@ -121,8 +124,9 @@ def convergence_dist(dist):
 
 def kermadec_slip_rate(dist: float, modelled_value: float = 0.):
     if modelled_value > 0.:
-        return modelled_value + convergence(dist) * coupling(dist) * (dist - east_cape_dist) / (start_0_2_dist -
-                                                                                                east_cape_dist)
+        frac = (dist - east_cape_dist) / (start_0_2_dist - east_cape_dist)
+        print(frac)
+        return modelled_value * (1 - frac) + convergence(dist) * coupling(dist) * frac
     else:
         return convergence(dist) * coupling(dist)
 
@@ -267,8 +271,8 @@ for centre_point in all_points_array:
         sd_weights = np.exp(-1 * sd_distances[sd_distances < profile_half_width] / (2 * gaussian_sigma))
         sd_values = sd_all_values[sd_distances < profile_half_width]
         sd_average = np.average(sd_values, weights=sd_weights)
-        if centre_dist > east_cape_dist:
-            sd_average = kermadec_slip_rate(float(centre_dist), modelled_value=sd_average)
+        # if centre_dist > east_cape_dist:
+        #     sd_average = kermadec_slip_rate(float(centre_dist), modelled_value=sd_average)
     elif centre_dist > start_0_2_dist:
         # print(centre_wgs)
         sd_average = kermadec_slip_rate(float(centre_dist))
@@ -372,7 +376,21 @@ df_tiles = pd.merge(df_tiles, df_tiles_xyz, left_index=True, right_index=True)
 
 
 df_tiles_out = pd.merge(df_indices, df_tiles, left_index=True, right_index=True)
+for i in range(21, 30):
+    for j in range(6):
+        fixed_row = df_tiles_out[(df_tiles_out.along_strike_index == 21) & (df_tiles_out.down_dip_index == j)]
+        moving_row = df_tiles_out[(df_tiles_out.along_strike_index == i) & (df_tiles_out.down_dip_index == j)]
+        sd_value = fixed_row["slip_deficit (mm/yr)"]
+        cen_point = list(moving_row.tile_geometry)[0].centroid
+        cen_dist = point_dist_nztm(cen_point)
+        sd_value = float(sd_value)
+        print(cen_dist, sd_value)
+        smoothed_sd = kermadec_slip_rate(cen_dist, modelled_value=sd_value)
+        # sd_dist = point_dist()
+
+        df_tiles_out.loc[(df_tiles_out.along_strike_index == i) & (df_tiles_out.down_dip_index == j), "slip_deficit (mm/yr)"] = smoothed_sd
+
 df_centres_out = pd.merge(df_indices, df_centres, left_index=True, right_index=True)
 
-df_tiles_out.to_csv(os.path.join(output_dir, "hk_tile_parameters_30.csv"), index=False)
+df_tiles_out.to_csv(os.path.join(output_dir, "hk_tile_parameters_creeping_trench_slip_deficit_v2_30.csv"), index=False)
 df_centres_out.to_csv(os.path.join(output_dir, "hk_tile_centres_nztm_30.csv"), index=False)
