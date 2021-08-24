@@ -315,7 +315,7 @@ class CfmMultiFault:
 
     def __init__(self, fault_geodataframe: gpd.GeoDataFrame, exclude_region_polygons: list = None,
                  exclude_region_min_sr: float = 1.8, include_names: list = None, depth_type: str = "D90",
-                 exclude_aus: bool = True, exclude_zero: bool = True):
+                 exclude_aus: bool = True, exclude_zero: bool = True, sort_sr: bool = False):
         self.logger = logging.getLogger('cmf_logger')
         self.check_input1(fault_geodataframe)
         self.check_input2(fault_geodataframe)
@@ -375,9 +375,11 @@ class CfmMultiFault:
             trimmed_fault_gdf = trimmed_fault_gdf[trimmed_fault_gdf.Fault_stat != "A-US"]
 
 
-
-        # Sort alphabetically by name
-        sorted_df = trimmed_fault_gdf.sort_values("Name")
+        if sort_sr:
+            sorted_df = trimmed_fault_gdf.sort_values("SR_pref", ascending=False)
+        else:
+            # Sort alphabetically by name
+            sorted_df = trimmed_fault_gdf.sort_values("Name")
         # Reset index to line up with alphabetical sorting
         sorted_df = sorted_df.reset_index(drop=True)
         for i, row in sorted_df.iterrows():
@@ -416,11 +418,11 @@ class CfmMultiFault:
 
     @classmethod
     def from_shp(cls, filename: str, exclude_region_polygons: List[Polygon] = None, depth_type: str = "D90",
-                 exclude_region_min_sr: float = 1.8):
+                 exclude_region_min_sr: float = 1.8, sort_sr: bool = False):
         assert os.path.exists(filename)
         fault_geodataframe = gpd.GeoDataFrame.from_file(filename)
         multi_fault = cls(fault_geodataframe, exclude_region_polygons=exclude_region_polygons,
-                          exclude_region_min_sr=exclude_region_min_sr, depth_type=depth_type)
+                          exclude_region_min_sr=exclude_region_min_sr, depth_type=depth_type, sort_sr=sort_sr)
         return multi_fault
 
     def to_opensha_xml(self, exclude_subduction: bool = True, buffer_width: float = 5000.,
@@ -765,6 +767,9 @@ class CfmFault:
 
         combined_polygon_array = np.vstack((surface_trace_array, bottom_trace[::-1]))
         return Polygon(combined_polygon_array)
+
+    def down_dip_contours(self, interval: float = 1000.):
+        contour_list = []
 
     def surface_trace_buffer(self, buffer_distance: Union[int, float] = 100., cap_style: int = 2,
                              join_style: int = 2):
