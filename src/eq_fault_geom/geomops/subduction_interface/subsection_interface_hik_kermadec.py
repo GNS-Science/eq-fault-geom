@@ -137,11 +137,11 @@ Read and pre process data from files, set parameters for meshing
 
 # Relevant quantities that control tile distribution
 # Swath profile half width; for making (slightly) smoothed profiles/cross-sections through interface.
-profile_half_width = 15000
+profile_half_width = 5000
 # Spacing between down-dip profiles (and therefore tiles) in the along-strike direction
-profile_spacing = 30000
+profile_spacing = 10000
 # Max distance to select points to fit
-search_radius = 3.e4
+search_radius = 1.e4
 
 preferred_depth = -5.e4
 
@@ -158,7 +158,7 @@ all_xyz_with_nans = np.vstack((x_grid.flatten(), y_grid.flatten(), z.flatten()))
 # Remove points where z is NaN
 all_xyz = all_xyz_with_nans[~np.isnan(all_xyz_with_nans).any(axis=1)]
 
-slip_deficit_file = os.path.join(data_dir, "subduction/trench_creep_hik_slipdeficit.txt")
+slip_deficit_file = os.path.join(data_dir, "subduction/trench_lock_hik_slipdeficit.txt")
 slip_deficit_df = pd.read_csv(slip_deficit_file, delim_whitespace=True)
 slip_deficit_nztm_x, slip_deficit_nztm_y = transformer.transform(slip_deficit_df["#long"].to_list(),
                                                                  slip_deficit_df["lat"].to_list())
@@ -392,5 +392,5 @@ for i in range(21, 30):
 
 df_centres_out = pd.merge(df_indices, df_centres, left_index=True, right_index=True)
 
-df_tiles_out.to_csv(os.path.join(output_dir, "hk_tile_parameters_creeping_trench_slip_deficit_v2_30.csv"), index=False)
-df_centres_out.to_csv(os.path.join(output_dir, "hk_tile_centres_nztm_30.csv"), index=False)
+df_tiles_out.to_csv(os.path.join(output_dir, "hk_tile_parameters_locked_trench_slip_deficit_v2_10.csv"), index=False)
+df_centres_out.to_csv(os.path.join(output_dir, "hk_tile_centres_nztm_10.csv"), index=False)

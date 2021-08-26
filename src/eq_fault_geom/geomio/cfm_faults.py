@@ -41,7 +41,7 @@ expected_fields = ['Depth_Best', 'Depth_Max', 'Depth_Min', 'Dip_pref',
                    'geometry']
 
 # There will be a mess if these fields don't exist
-required_fields = ['Name', 'Number', 'geometry']
+required_fields = ['Name', 'Fault_ID', 'geometry']
 
 
 def smallest_difference(value1, value2):
@@ -602,9 +602,8 @@ class CfmFault:
                         self._dip_dir = reversed_dd
                     else:
                         print("{}: Supplied trace and dip direction {} are inconsistent: expect either {:.1f} or {:.1f} "
-                              "dip azimuth. Please check...".format(self.name, self.dip_dir_str,
+                              "dip azimuth. Please check...".format(self.name, self.dip_dir_str, dd_from_trace, reversed_dd))
                         self.logger.warning("Supplied trace and dip direction are inconsistent")
-                        dd_from_trace, reversed_dd))
                         self._dip_dir = dd_from_trace
                 else:
                     self._dip_dir = dd_from_trace
