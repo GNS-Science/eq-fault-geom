@@ -137,10 +137,15 @@ def reverse_line(line: LineString):
     :return:
     """
     assert isinstance(line, LineString)
-    x, y = line.xy
+    x, y, z = np.array(line.coords).T
     x_back = x[-1::-1]
     y_back = y[-1::-1]
-    new_line = LineString([[xi, yi] for xi, yi in zip(x_back, y_back)])
+
+    if line.has_z:
+        z_back = z[-1::-1]
+        new_line = LineString([[xi, yi, zi] for xi, yi, zi in zip(x_back, y_back, z_back)])
+    else:
+        new_line = LineString([[xi, yi] for xi, yi in zip(x_back, y_back)])
     return new_line
 
 
@@ -725,7 +730,7 @@ class CfmFault:
                     if any([315. - tolerance <= dds for dds in [dd_from_trace, reversed_dd]]):
                         self._dip_dir = max([dd_from_trace, reversed_dd])
                     elif any([dds <= 45. + tolerance for dds in [dd_from_trace, reversed_dd]]):
-                        self._dip_dir = max([dd_from_trace, reversed_dd])
+                        self._dip_dir = min([dd_from_trace, reversed_dd])
                     else:
                         print("{}: Supplied trace and dip direction {} are inconsistent: expect either {:.1f} or {:.1f}"
                               " dip azimuth. Please check...".format(self.name, self.dip_dir_str,
@@ -751,8 +756,8 @@ class CfmFault:
             # Assume vertical
             return np.array([0., 0., -1])
         else:
-            z = np.sin(np.radians(self.dip_min))
-            x, y = np.cos(np.radians(self.dip_min)) * np.array([np.sin(np.radians(self.dip_dir)),
+            z = np.sin(np.radians(self.dip_best))
+            x, y = np.cos(np.radians(self.dip_best)) * np.array([np.sin(np.radians(self.dip_dir)),
                                                                 np.cos(np.radians(self.dip_dir))])
         return np.array([x, y, -z])
 
@@ -1037,6 +1042,7 @@ class CfmFault:
             fault.depth_best, fault.depth_stdev = series["D90"], series["D90_stdev"]
         else:
             fault.depth_best, fault.depth_stdev = series["Dfcomb"], series["Dfcomb_std"]
+
         return fault
 
     @classmethod
