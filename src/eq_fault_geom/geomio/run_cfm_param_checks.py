@@ -48,7 +48,7 @@ data_d90_notvz = CfmMultiFault.from_shp(shp, exclude_region_polygons=poly_ls,
 for file_handle, dataset in zip(["d90_all", "d90_no_tvz"],
                                [data_d90_all, data_d90_notvz]):
     xml_buffer = dataset.to_opensha_xml(exclude_subduction=True, buffer_width=buffer_width, write_buffers=False)
-    # with open("cfm_0_9_{}.xml".format(file_handle), "wb") as f:
-    #     f.write(xml_buffer)
-    with open("cfm_0_9_{}_stirling_depths.xml".format(file_handle), "wb") as f:
+    with open("cfm_0_9_{}.xml".format(file_handle), "wb") as f:
         f.write(xml_buffer)
+    # with open("cfm_0_9_{}_stirling_depths.xml".format(file_handle), "wb") as f:
+    #     f.write(xml_buffer)

@@ -137,7 +137,10 @@ def reverse_line(line: LineString):
     :return:
     """
     assert isinstance(line, LineString)
-    x, y, z = np.array(line.coords).T
+    if line.has_z:
+        x, y, z = np.array(line.coords).T
+    else:
+        x, y = np.array(line.coords).T
     x_back = x[-1::-1]
     y_back = y[-1::-1]
 
@@ -368,10 +371,10 @@ class CfmMultiFault:
         trimmed_fault_gdf = trimmed_fault_gdf[trimmed_fault_gdf.Dip_pref > 0]
 
         if exclude_zero:
-            to_exclude = trimmed_fault_gdf[trimmed_fault_gdf.SR_max == 0.]
+            to_exclude = trimmed_fault_gdf[trimmed_fault_gdf.SR_pref == 0.]
             for iname in list(to_exclude.Name):
                 print(iname)
-            trimmed_fault_gdf = trimmed_fault_gdf[trimmed_fault_gdf.SR_max > 0.]
+            trimmed_fault_gdf = trimmed_fault_gdf[trimmed_fault_gdf.SR_pref > 0.]
 
         if exclude_aus:
             to_exclude = trimmed_fault_gdf[trimmed_fault_gdf.Fault_stat == "A-US"]
@@ -427,7 +430,8 @@ class CfmMultiFault:
         assert os.path.exists(filename)
         fault_geodataframe = gpd.GeoDataFrame.from_file(filename)
         multi_fault = cls(fault_geodataframe, exclude_region_polygons=exclude_region_polygons,
-                          exclude_region_min_sr=exclude_region_min_sr, depth_type=depth_type, sort_sr=sort_sr)
+                          exclude_region_min_sr=exclude_region_min_sr, depth_type=depth_type, sort_sr=sort_sr,
+                          )
         return multi_fault
 
     def to_opensha_xml(self, exclude_subduction: bool = True, buffer_width: float = 5000.,
@@ -1067,8 +1071,8 @@ class CfmFault:
         # Metadata
         attribute_dic = {"sectionId": "{:d}".format(section_id),
                          "sectionName": self.name,
-                         "aveLongTermSlipRate": "{:.1f}".format(self.sr_best),
-                         "slipRateStdDev": "{:.1f}".format(self.sr_sigma),
+                         "aveLongTermSlipRate": "{:.2f}".format(self.sr_best),
+                         "slipRateStdDev": "{:.2f}".format(self.sr_sigma),
                          "aveDip": "{:.1f}".format(self.dip_best),
                          "aveRake": "{:.1f}".format(self.rake_to_opensha(self.rake_best)),
                          "aveUpperDepth": "0.0",
