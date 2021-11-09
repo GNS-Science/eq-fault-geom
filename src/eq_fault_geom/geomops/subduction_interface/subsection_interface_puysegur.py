@@ -113,11 +113,14 @@ depth_label = int(-1 * preferred_depth / 1000.)
 """
 Calculate locations of tile centres
 """
-puysegur_points = pd.read_csv("/home/UOCNT/arh128/PycharmProjects/eq-fault-geom/data/subduction/Puysegur_Fiordland.dat",
-                              sep="\t")
-x_grid = np.array(puysegur_points.x)
-y_grid = np.array(puysegur_points.y)
-z = np.array(puysegur_points.z)
+puysegur_points = pd.read_csv("/home/UOCNT/arh128/PycharmProjects/eq-fault-geom/data/subduction/Puysegur_vertex_points_WGS84.csv",
+                              sep=",")
+
+xwgs, ywgs = transformer.transform(np.array(puysegur_points.LONG), np.array(puysegur_points.LAT))
+
+x_grid = np.array(xwgs)
+y_grid = np.array(ywgs)
+z = np.array(puysegur_points.elevation)
 
 all_xyz = np.vstack((x_grid, y_grid, z)).T
 
