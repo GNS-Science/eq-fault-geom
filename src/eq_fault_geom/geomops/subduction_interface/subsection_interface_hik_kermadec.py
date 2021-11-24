@@ -137,11 +137,11 @@ Read and pre process data from files, set parameters for meshing
 
 # Relevant quantities that control tile distribution
 # Swath profile half width; for making (slightly) smoothed profiles/cross-sections through interface.
-profile_half_width = 5000
+profile_half_width = 15000
 # Spacing between down-dip profiles (and therefore tiles) in the along-strike direction
-profile_spacing = 10000
+profile_spacing = 30000
 # Max distance to select points to fit
-search_radius = 1.e4
+search_radius = 3.e4
 
 preferred_depth = -5.e4
 
@@ -335,7 +335,14 @@ for array_i in all_tile_ls:
 
 
 outlines = gpd.GeoSeries(all_polygons, crs="epsg:2193")
-outlines_wgs = outlines.to_crs(epsg=4326)
+outlines_wgs_list = []
+for polygon in all_polygons:
+    coord_array = np.array(polygon.exterior.coords)
+    new_x, new_y, new_z = trans_inv.transform(*coord_array.T)
+    new_coords = np.vstack((new_x, new_y, new_z)).T
+    outlines_wgs_list.append(Polygon(new_coords))
+
+outlines_wgs = gpd.GeoSeries(outlines_wgs_list, crs=4326)
 outlines_wgs.to_file("hk_tile_outlines.shp")
 
 all_points = [Point(row) for row in all_points_array]
@@ -352,8 +359,8 @@ top_trace_wgs = top_trace_gs.to_crs(epsg=4326)
 out_alternative_ls = []
 for trace, dip, top_depth, bottom_depth, slip_deficit_i in zip(top_trace_wgs.geometry, dips, top_depths, bottom_depths,
                                                                slip_deficit_list):
-    x0, y0 = trace.coords[0][:-1]
-    x1, y1 = trace.coords[1][:-1]
+    x0, y0 = trace.coords[0]
+    x1, y1 = trace.coords[1]
     if y1 > y0:
         out_alternative_ls.append([x1, y1, x0, y0, dip, top_depth / -1000, bottom_depth / -1000, slip_deficit_i])
     else:
@@ -392,5 +399,5 @@ for i in range(21, 30):
 
 df_centres_out = pd.merge(df_indices, df_centres, left_index=True, right_index=True)
 
-df_tiles_out.to_csv(os.path.join(output_dir, "hk_tile_parameters_locked_trench_slip_deficit_v2_10.csv"), index=False)
-df_centres_out.to_csv(os.path.join(output_dir, "hk_tile_centres_nztm_10.csv"), index=False)
+df_tiles_out.to_csv(os.path.join(output_dir, "hk_tile_parameters_locked_trench_slip_deficit_v2_30.csv"), index=False)
+df_centres_out.to_csv(os.path.join(output_dir, "hk_tile_centres_nztm_30.csv"), index=False)
