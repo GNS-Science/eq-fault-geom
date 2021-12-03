@@ -43,7 +43,11 @@ expected_fields = ['D90', 'Depth_max', 'Depth_min', 'Dip_pref',
 # There will be a mess if these fields don't exist
 required_fields = ['Name', 'Fault_ID', 'geometry']
 
+
 def decimal_deg_to_minutes(decdeg: float):
+    """
+    For use with hybrid model, which uses degrees and minutes.
+    """
     if decdeg < 0.:
         decdeg *= -1
     deg = np.int(np.floor(decdeg))
@@ -132,6 +136,7 @@ def reverse_bearing(bearing: Union[int, float]):
 def reverse_line(line: LineString):
     """
     Change the order that points in a LineString object are presented.
+    Updated to work with 3d lines (has_z), September 2021
     Important for OpenSHA, I think
     :param line:
     :return:
@@ -265,57 +270,6 @@ def fault_polygon_xml(polygon: Polygon, section_name: str, z: Union[float, int] 
     return polygon_element
 
 
-def polygons_to_shapely_format(supplied_polygons: Union[str, Polygon, MultiPolygon, List[Polygon], np.ndarray]):
-    """
-    Function to turn supplied polygon(s) into list of shapely Polygon objects
-    :param supplied_polygons:
-    :return:
-    """
-    if isinstance(supplied_polygons, str):
-        # Assume file
-        assert os.path.exists(supplied_polygons)
-        if supplied_polygons[-4:] == ".shp":
-            # Read shapefile
-            df = gpd.GeoDataFrame.from_file(supplied_polygons)
-            poly_ls = list(df.geometry)
-            assert all([isinstance(a, Polygon) for a in poly_ls])
-        elif supplied_polygons[-4:] == ".kml":
-            raise NotImplementedError("KML import not implemented")
-
-        elif supplied_polygons[-4:] == ".csv":
-            df = pd.read_csv(supplied_polygons)
-            # Assumes one polygon, with x y coordinates in first columns
-            x = list(df.iloc[:, 0])
-            y = list(df.iloc[:, 1])
-            poly = Polygon([(xi, yi) for xi, yi in zip(x, y)])
-            poly_ls = [poly]
-
-    elif isinstance(supplied_polygons, np.ndarray):
-        # Assumes one polygon, with x y coordinates in first two columns
-        assert supplied_polygons.shape[1] == 2, "Two columns expected"
-        poly = Polygon([(coord[0], coord[1]) for coord in supplied_polygons])
-        poly_ls = [poly]
-
-    elif isinstance(supplied_polygons, Polygon):
-        poly_ls = [supplied_polygons]
-
-    elif isinstance(supplied_polygons, MultiPolygon):
-        poly_ls = list(supplied_polygons)
-
-    elif isinstance(supplied_polygons, list):
-        assert all([isinstance(a, Polygon) for a in supplied_polygons])
-        poly_ls = [supplied_polygons]
-
-    else:
-        raise TypeError("Unexpected input: supply shp, csv, numpy array, shapely polygon, list of polygons or multipol")
-
-    return poly_ls
-
-
-
-
-
-
 class CfmMultiFault:
     """
     Class to hold data for multiple faults, read in from shapefile (and hopefully also tsurfaces)
@@ -371,16 +325,12 @@ class CfmMultiFault:
         # Temporarily avoid having to deal with zero dips
         trimmed_fault_gdf = trimmed_fault_gdf[trimmed_fault_gdf.Dip_pref > 0]
 
+        # Exclude faults with zero slip rate
         if exclude_zero:
-            to_exclude = trimmed_fault_gdf[trimmed_fault_gdf.SR_pref == 0.]
-            for iname in list(to_exclude.Name):
-                print(iname)
             trimmed_fault_gdf = trimmed_fault_gdf[trimmed_fault_gdf.SR_pref > 0.]
 
+        # Exclude upper slope faults (A-US classification)
         if exclude_aus:
-            to_exclude = trimmed_fault_gdf[trimmed_fault_gdf.Fault_stat == "A-US"]
-            for iname in list(to_exclude.Name):
-                print(iname)
             trimmed_fault_gdf = trimmed_fault_gdf[trimmed_fault_gdf.Fault_stat != "A-US"]
 
 
@@ -429,6 +379,9 @@ class CfmMultiFault:
     @classmethod
     def from_shp(cls, filename: str, exclude_region_polygons: List[Polygon] = None, depth_type: str = "D90",
                  exclude_region_min_sr: float = 1.8, sort_sr: bool = False):
+        """
+        Read CFM shapefile
+        """
         assert os.path.exists(filename)
         fault_geodataframe = gpd.GeoDataFrame.from_file(filename)
         multi_fault = cls(fault_geodataframe, exclude_region_polygons=exclude_region_polygons,
@@ -751,12 +704,18 @@ class CfmFault:
 
     @staticmethod
     def validate_dip(dip: Union[float, int]):
+        """
+        Generally between 0 and 90
+        """
         assert isinstance(dip, (float, int))
         assert valid_dip_range[0] <= dip <= valid_dip_range[1]
         return dip
 
     @property
     def down_dip_vector(self):
+        """
+        Calculated from dip and dip direction
+        """
         assert self.dip_best is not None
         if self.dip_dir is None:
             # Assume vertical
@@ -769,6 +728,9 @@ class CfmFault:
 
     @property
     def down_dip_polygon(self):
+        """
+
+        """
         surface_trace_array = np.vstack(self.nztm_trace.xy).T
         if abs(self.down_dip_vector[-1]) > 1.e-3:
             bottom_trace = surface_trace_array + -1. * self.down_dip_vector[:-1] * \
@@ -778,9 +740,6 @@ class CfmFault:
 
         combined_polygon_array = np.vstack((surface_trace_array, bottom_trace[::-1]))
         return Polygon(combined_polygon_array)
-
-    def down_dip_contours(self, interval: float = 1000.):
-        contour_list = []
 
     def surface_trace_buffer(self, buffer_distance: Union[int, float] = 100., cap_style: int = 2,
                              join_style: int = 2):
@@ -870,6 +829,9 @@ class CfmFault:
 
     @staticmethod
     def rake_to_opensha(rake: Union[float, int]):
+        """
+        To give opensha convention
+        """
         new_rake = reverse_bearing(rake)
         while new_rake > 180:
             new_rake -= 360.
@@ -882,7 +844,6 @@ class CfmFault:
         rake_v = self.validate_rake(rake)
         for key, rake_value in zip(["rake_min", "rake_best"], [self.rake_min, self.rake_best]):
             if rake_value is not None and bearing_leq(rake_v, rake_value):
-                #print("{}: rake_max ({:.2f}) is lower than {} ({:.2f})".format(self.name, rake_v, key, rake_value))
                 print("{}: rake_max ({}) is lower than {} ({})".format(self.name, rake_v, key, rake_value))
                 self.logger.warning("rake_max is lower than rake min or rake best")
         self._rake_max = rake_v
