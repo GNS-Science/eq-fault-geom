@@ -323,7 +323,8 @@ class CfmMultiFault:
 
     def __init__(self, fault_geodataframe: gpd.GeoDataFrame, exclude_region_polygons: list = None,
                  exclude_region_min_sr: float = 1.8, include_names: list = None, depth_type: str = "D90",
-                 exclude_aus: bool = True, exclude_zero: bool = True, sort_sr: bool = False):
+                 exclude_aus: bool = True, exclude_zero: bool = True, sort_sr: bool = False,
+                 remove_colons: bool = False):
         self.logger = logging.getLogger('cmf_logger')
         self.check_input1(fault_geodataframe)
         self.check_input2(fault_geodataframe)
@@ -391,7 +392,7 @@ class CfmMultiFault:
         # Reset index to line up with alphabetical sorting
         sorted_df = sorted_df.reset_index(drop=True)
         for i, row in sorted_df.iterrows():
-            self.add_fault(row, depth_type=depth_type)
+            self.add_fault(row, depth_type=depth_type, remove_colons=remove_colons)
 
         self.df = sorted_df
 
@@ -413,8 +414,9 @@ class CfmMultiFault:
     def faults(self):
         return self._faults
 
-    def add_fault(self, series: pd.Series, depth_type: str = "D90"):
-        cfmFault = CfmFault.from_series(series, parent_multifault=self, depth_type=depth_type)
+    def add_fault(self, series: pd.Series, depth_type: str = "D90", remove_colons: bool = False):
+        cfmFault = CfmFault.from_series(series, parent_multifault=self, depth_type=depth_type,
+                                        remove_colons=remove_colons)
         self.faults.append(cfmFault)
 
     @property
@@ -1030,11 +1032,14 @@ class CfmFault:
         return self._parent
 
     @classmethod
-    def from_series(cls, series: pd.Series, parent_multifault: CfmMultiFault = None, depth_type: str = "D90"):
+    def from_series(cls, series: pd.Series, parent_multifault: CfmMultiFault = None, depth_type: str = "D90",
+                    remove_colons: bool = False):
         assert isinstance(series, pd.Series)
         assert depth_type in ["D90", "Dfcomb"]
         fault = cls(parent_multifault=parent_multifault)
         fault.name = series["Name"]
+        if remove_colons:
+            fault.name = series["Name"].replace(":", "")
         fault.number = int(series["Fault_ID"])
         fault.dip_best, fault.dip_min, fault.dip_max = series["Dip_pref"], series["Dip_min"], series["Dip_max"]
         fault.nztm_trace = series["geometry"]
