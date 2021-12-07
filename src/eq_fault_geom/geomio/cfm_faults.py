@@ -43,7 +43,11 @@ expected_fields = ['D90', 'Depth_max', 'Depth_min', 'Dip_pref',
 # There will be a mess if these fields don't exist
 required_fields = ['Name', 'Fault_ID', 'geometry']
 
+
 def decimal_deg_to_minutes(decdeg: float):
+    """
+    For use with hybrid model, which uses degrees and minutes.
+    """
     if decdeg < 0.:
         decdeg *= -1
     deg = np.int(np.floor(decdeg))
@@ -132,15 +136,24 @@ def reverse_bearing(bearing: Union[int, float]):
 def reverse_line(line: LineString):
     """
     Change the order that points in a LineString object are presented.
+    Updated to work with 3d lines (has_z), September 2021
     Important for OpenSHA, I think
     :param line:
     :return:
     """
     assert isinstance(line, LineString)
-    x, y = line.xy
+    if line.has_z:
+        x, y, z = np.array(line.coords).T
+    else:
+        x, y = np.array(line.coords).T
     x_back = x[-1::-1]
     y_back = y[-1::-1]
-    new_line = LineString([[xi, yi] for xi, yi in zip(x_back, y_back)])
+
+    if line.has_z:
+        z_back = z[-1::-1]
+        new_line = LineString([[xi, yi, zi] for xi, yi, zi in zip(x_back, y_back, z_back)])
+    else:
+        new_line = LineString([[xi, yi] for xi, yi in zip(x_back, y_back)])
     return new_line
 
 
@@ -155,10 +168,26 @@ def calculate_dip_direction(line: LineString):
     x, y = line.xy
     x, y = np.array(x), np.array(y)
     # Calculate gradient of line in 2D
-    p = np.polyfit(x, y, 1)
-    gradient = p[0]
-    # Gradient to bearing
-    bearing = 180 - np.degrees(np.arctan2(gradient, 1))
+    px = np.polyfit(x, y, 1, full=True)
+    gradient_x = px[0][0]
+
+    if len(px[1]):
+        res_x = px[1][0]
+    else:
+        res_x = 0
+
+    py = np.polyfit(y, x, 1, full=True)
+    gradient_y = py[0][0]
+    if len(py[1]):
+        res_y = py[1][0]
+    else:
+        res_y = 0
+
+    if res_x <= res_y:
+        # Gradient to bearing
+        bearing = 180 - np.degrees(np.arctan2(gradient_x, 1))
+    else:
+        bearing = 180 - np.degrees(np.arctan2(1/gradient_y, 1))
     bearing_vector = np.array([np.sin(np.radians(bearing)), np.cos(np.radians(bearing))])
 
     # Determine whether line object fits strike convention
@@ -241,57 +270,6 @@ def fault_polygon_xml(polygon: Polygon, section_name: str, z: Union[float, int] 
     return polygon_element
 
 
-def polygons_to_shapely_format(supplied_polygons: Union[str, Polygon, MultiPolygon, List[Polygon], np.ndarray]):
-    """
-    Function to turn supplied polygon(s) into list of shapely Polygon objects
-    :param supplied_polygons:
-    :return:
-    """
-    if isinstance(supplied_polygons, str):
-        # Assume file
-        assert os.path.exists(supplied_polygons)
-        if supplied_polygons[-4:] == ".shp":
-            # Read shapefile
-            df = gpd.GeoDataFrame.from_file(supplied_polygons)
-            poly_ls = list(df.geometry)
-            assert all([isinstance(a, Polygon) for a in poly_ls])
-        elif supplied_polygons[-4:] == ".kml":
-            raise NotImplementedError("KML import not implemented")
-
-        elif supplied_polygons[-4:] == ".csv":
-            df = pd.read_csv(supplied_polygons)
-            # Assumes one polygon, with x y coordinates in first columns
-            x = list(df.iloc[:, 0])
-            y = list(df.iloc[:, 1])
-            poly = Polygon([(xi, yi) for xi, yi in zip(x, y)])
-            poly_ls = [poly]
-
-    elif isinstance(supplied_polygons, np.ndarray):
-        # Assumes one polygon, with x y coordinates in first two columns
-        assert supplied_polygons.shape[1] == 2, "Two columns expected"
-        poly = Polygon([(coord[0], coord[1]) for coord in supplied_polygons])
-        poly_ls = [poly]
-
-    elif isinstance(supplied_polygons, Polygon):
-        poly_ls = [supplied_polygons]
-
-    elif isinstance(supplied_polygons, MultiPolygon):
-        poly_ls = list(supplied_polygons)
-
-    elif isinstance(supplied_polygons, list):
-        assert all([isinstance(a, Polygon) for a in supplied_polygons])
-        poly_ls = [supplied_polygons]
-
-    else:
-        raise TypeError("Unexpected input: supply shp, csv, numpy array, shapely polygon, list of polygons or multipol")
-
-    return poly_ls
-
-
-
-
-
-
 class CfmMultiFault:
     """
     Class to hold data for multiple faults, read in from shapefile (and hopefully also tsurfaces)
@@ -299,7 +277,8 @@ class CfmMultiFault:
 
     def __init__(self, fault_geodataframe: gpd.GeoDataFrame, exclude_region_polygons: list = None,
                  exclude_region_min_sr: float = 1.8, include_names: list = None, depth_type: str = "D90",
-                 exclude_aus: bool = True, exclude_zero: bool = True):
+                 exclude_aus: bool = True, exclude_zero: bool = True, sort_sr: bool = False,
+                 remove_colons: bool = False):
         self.logger = logging.getLogger('cmf_logger')
         self.check_input1(fault_geodataframe)
         self.check_input2(fault_geodataframe)
@@ -346,26 +325,24 @@ class CfmMultiFault:
         # Temporarily avoid having to deal with zero dips
         trimmed_fault_gdf = trimmed_fault_gdf[trimmed_fault_gdf.Dip_pref > 0]
 
+        # Exclude faults with zero slip rate
         if exclude_zero:
-            to_exclude = trimmed_fault_gdf[trimmed_fault_gdf.SR_max == 0.]
-            for iname in list(to_exclude.Name):
-                print(iname)
-            trimmed_fault_gdf = trimmed_fault_gdf[trimmed_fault_gdf.SR_max > 0.]
+            trimmed_fault_gdf = trimmed_fault_gdf[trimmed_fault_gdf.SR_pref > 0.]
 
+        # Exclude upper slope faults (A-US classification)
         if exclude_aus:
-            to_exclude = trimmed_fault_gdf[trimmed_fault_gdf.Fault_stat == "A-US"]
-            for iname in list(to_exclude.Name):
-                print(iname)
             trimmed_fault_gdf = trimmed_fault_gdf[trimmed_fault_gdf.Fault_stat != "A-US"]
 
 
-
-        # Sort alphabetically by name
-        sorted_df = trimmed_fault_gdf.sort_values("Name")
+        if sort_sr:
+            sorted_df = trimmed_fault_gdf.sort_values("SR_pref", ascending=False)
+        else:
+            # Sort alphabetically by name
+            sorted_df = trimmed_fault_gdf.sort_values("Name")
         # Reset index to line up with alphabetical sorting
         sorted_df = sorted_df.reset_index(drop=True)
         for i, row in sorted_df.iterrows():
-            self.add_fault(row, depth_type=depth_type)
+            self.add_fault(row, depth_type=depth_type, remove_colons=remove_colons)
 
         self.df = sorted_df
 
@@ -387,8 +364,9 @@ class CfmMultiFault:
     def faults(self):
         return self._faults
 
-    def add_fault(self, series: pd.Series, depth_type: str = "D90"):
-        cfmFault = CfmFault.from_series(series, parent_multifault=self, depth_type=depth_type)
+    def add_fault(self, series: pd.Series, depth_type: str = "D90", remove_colons: bool = False):
+        cfmFault = CfmFault.from_series(series, parent_multifault=self, depth_type=depth_type,
+                                        remove_colons=remove_colons)
         self.faults.append(cfmFault)
 
     @property
@@ -400,11 +378,15 @@ class CfmMultiFault:
 
     @classmethod
     def from_shp(cls, filename: str, exclude_region_polygons: List[Polygon] = None, depth_type: str = "D90",
-                 exclude_region_min_sr: float = 1.8):
+                 exclude_region_min_sr: float = 1.8, sort_sr: bool = False):
+        """
+        Read CFM shapefile
+        """
         assert os.path.exists(filename)
         fault_geodataframe = gpd.GeoDataFrame.from_file(filename)
         multi_fault = cls(fault_geodataframe, exclude_region_polygons=exclude_region_polygons,
-                          exclude_region_min_sr=exclude_region_min_sr, depth_type=depth_type)
+                          exclude_region_min_sr=exclude_region_min_sr, depth_type=depth_type, sort_sr=sort_sr,
+                          )
         return multi_fault
 
     def to_opensha_xml(self, exclude_subduction: bool = True, buffer_width: float = 5000.,
@@ -668,7 +650,7 @@ class CfmFault:
         """
         return self._dip_dir
 
-    def validate_dip_direction(self):
+    def validate_dip_direction(self, tolerance: float = 10.):
         """
         Compares dip direction string (e.g. NW) with
         :return:
@@ -686,44 +668,69 @@ class CfmFault:
             dd_from_trace = calculate_dip_direction(self.nztm_trace)
             if self.dip_dir_str != "SUBVERTICAL AND VARIABLE":
                 min_dd_range, max_dd_range = dip_direction_ranges[self.dip_dir_str]
-                if not all([min_dd_range <= dd_from_trace, dd_from_trace <= max_dd_range]):
-                    reversed_dd = reverse_bearing(dd_from_trace)
-                    if all([min_dd_range <= reversed_dd, reversed_dd <= max_dd_range]):
-                        self._nztm_trace = reverse_line(self.nztm_trace)
-                        self._dip_dir = reversed_dd
+                if self.dip_dir_str != "N":
+                    if not all([min_dd_range - tolerance <= dd_from_trace, dd_from_trace <= max_dd_range + tolerance]):
+                        reversed_dd = reverse_bearing(dd_from_trace)
+                        if all([min_dd_range - tolerance <= reversed_dd, reversed_dd <= max_dd_range + tolerance]):
+                            self._nztm_trace = reverse_line(self.nztm_trace)
+                            self._dip_dir = reversed_dd
+                        else:
+                            print("{}: Supplied trace and dip direction {} are inconsistent: expect either {:.1f}"
+                                  "or {:.1f} dip azimuth. Please check...".format(self.name, self.dip_dir_str,
+                                                                                  dd_from_trace, reversed_dd))
+                            self.logger.warning("Supplied trace and dip direction are inconsistent")
+
+                            self._dip_dir = dd_from_trace
+
                     else:
-                        print("{}: Supplied trace and dip direction {} are inconsistent: expect either {:.1f} or {:.1f} "
-                              "dip azimuth. Please check...".format(self.name, self.dip_dir_str,
-                                                                    dd_from_trace, reversed_dd))
+                        self._dip_dir = dd_from_trace
+                else:
+                    reversed_dd = reverse_bearing(dd_from_trace)
+                    if any([315. - tolerance <= dds for dds in [dd_from_trace, reversed_dd]]):
+                        self._dip_dir = max([dd_from_trace, reversed_dd])
+                    elif any([dds <= 45. + tolerance for dds in [dd_from_trace, reversed_dd]]):
+                        self._dip_dir = min([dd_from_trace, reversed_dd])
+                    else:
+                        print("{}: Supplied trace and dip direction {} are inconsistent: expect either {:.1f} or {:.1f}"
+                              " dip azimuth. Please check...".format(self.name, self.dip_dir_str,
+                                                                     dd_from_trace, reversed_dd))
                         self.logger.warning("Supplied trace and dip direction are inconsistent")
 
                         self._dip_dir = dd_from_trace
-                else:
-                    self._dip_dir = dd_from_trace
+
             else:
                 self._dip_dir = dd_from_trace
             return
 
     @staticmethod
     def validate_dip(dip: Union[float, int]):
+        """
+        Generally between 0 and 90
+        """
         assert isinstance(dip, (float, int))
         assert valid_dip_range[0] <= dip <= valid_dip_range[1]
         return dip
 
     @property
     def down_dip_vector(self):
+        """
+        Calculated from dip and dip direction
+        """
         assert self.dip_best is not None
         if self.dip_dir is None:
             # Assume vertical
             return np.array([0., 0., -1])
         else:
-            z = np.sin(np.radians(self.dip_min))
-            x, y = np.cos(np.radians(self.dip_min)) * np.array([np.sin(np.radians(self.dip_dir)),
+            z = np.sin(np.radians(self.dip_best))
+            x, y = np.cos(np.radians(self.dip_best)) * np.array([np.sin(np.radians(self.dip_dir)),
                                                                 np.cos(np.radians(self.dip_dir))])
         return np.array([x, y, -z])
 
     @property
     def down_dip_polygon(self):
+        """
+
+        """
         surface_trace_array = np.vstack(self.nztm_trace.xy).T
         if abs(self.down_dip_vector[-1]) > 1.e-3:
             bottom_trace = surface_trace_array + -1. * self.down_dip_vector[:-1] * \
@@ -756,10 +763,6 @@ class CfmFault:
             return Polygon([[xi, yi] for xi, yi in zip(wgs_x, wgs_y)])
         else:
             return combined_buffer
-
-
-
-
 
     # Trace
     @property
@@ -826,6 +829,9 @@ class CfmFault:
 
     @staticmethod
     def rake_to_opensha(rake: Union[float, int]):
+        """
+        To give opensha convention
+        """
         new_rake = reverse_bearing(rake)
         while new_rake > 180:
             new_rake -= 360.
@@ -838,7 +844,6 @@ class CfmFault:
         rake_v = self.validate_rake(rake)
         for key, rake_value in zip(["rake_min", "rake_best"], [self.rake_min, self.rake_best]):
             if rake_value is not None and bearing_leq(rake_v, rake_value):
-                #print("{}: rake_max ({:.2f}) is lower than {} ({:.2f})".format(self.name, rake_v, key, rake_value))
                 print("{}: rake_max ({}) is lower than {} ({})".format(self.name, rake_v, key, rake_value))
                 self.logger.warning("rake_max is lower than rake min or rake best")
         self._rake_max = rake_v
@@ -988,11 +993,14 @@ class CfmFault:
         return self._parent
 
     @classmethod
-    def from_series(cls, series: pd.Series, parent_multifault: CfmMultiFault = None, depth_type: str = "D90"):
+    def from_series(cls, series: pd.Series, parent_multifault: CfmMultiFault = None, depth_type: str = "D90",
+                    remove_colons: bool = False):
         assert isinstance(series, pd.Series)
         assert depth_type in ["D90", "Dfcomb"]
         fault = cls(parent_multifault=parent_multifault)
         fault.name = series["Name"]
+        if remove_colons:
+            fault.name = series["Name"].replace(":", "")
         fault.number = int(series["Fault_ID"])
         fault.dip_best, fault.dip_min, fault.dip_max = series["Dip_pref"], series["Dip_min"], series["Dip_max"]
         fault.nztm_trace = series["geometry"]
@@ -1004,6 +1012,7 @@ class CfmFault:
             fault.depth_best, fault.depth_stdev = series["D90"], series["D90_stdev"]
         else:
             fault.depth_best, fault.depth_stdev = series["Dfcomb"], series["Dfcomb_std"]
+
         return fault
 
     @classmethod
@@ -1028,8 +1037,8 @@ class CfmFault:
         # Metadata
         attribute_dic = {"sectionId": "{:d}".format(section_id),
                          "sectionName": self.name,
-                         "aveLongTermSlipRate": "{:.1f}".format(self.sr_best),
-                         "slipRateStdDev": "{:.1f}".format(self.sr_sigma),
+                         "aveLongTermSlipRate": "{:.2f}".format(self.sr_best),
+                         "slipRateStdDev": "{:.2f}".format(self.sr_sigma),
                          "aveDip": "{:.1f}".format(self.dip_best),
                          "aveRake": "{:.1f}".format(self.rake_to_opensha(self.rake_best)),
                          "aveUpperDepth": "0.0",

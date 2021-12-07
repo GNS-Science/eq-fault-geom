@@ -52,6 +52,9 @@ if __name__ == "__main__":
                 else:
                     depth = max([value for value in values if value < 35])
 
+            if depth > 30:
+                depth = 12.0
+
         cfm.loc[cfm.Name == fault.Name, "D90"] = depth
 
     cfm.to_file("../../../data/cfm_shapefile/cfm_0_9_stirling_depths.gpkg", driver="GPKG")
