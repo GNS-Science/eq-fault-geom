@@ -832,7 +832,7 @@ class CfmFault:
         """
         To give opensha convention
         """
-        new_rake = reverse_bearing(rake)
+        new_rake = rake
         while new_rake > 180:
             new_rake -= 360.
         while new_rake <= -180.:
@@ -996,7 +996,7 @@ class CfmFault:
     def from_series(cls, series: pd.Series, parent_multifault: CfmMultiFault = None, depth_type: str = "D90",
                     remove_colons: bool = False):
         assert isinstance(series, pd.Series)
-        assert depth_type in ["D90", "Dfcomb"]
+        assert depth_type in ["D90", "Dfc80", "Dfc66"]
         fault = cls(parent_multifault=parent_multifault)
         fault.name = series["Name"]
         if remove_colons:
@@ -1009,9 +1009,11 @@ class CfmFault:
         fault.sense_dom, fault.sense_sec = series["Dom_sense"], series["Sub_sense"]
         fault.sr_best, fault.sr_min, fault.sr_max = series["SR_pref"], series["SR_min"], series["SR_max"]
         if depth_type == "D90":
-            fault.depth_best, fault.depth_stdev = series["D90"], series["D90_stdev"]
+            fault.depth_best = series["Depth_D90"]
+        elif depth_type == "Dfc80":
+            fault.depth_best = series["Depth_Dfc"] * 0.8
         else:
-            fault.depth_best, fault.depth_stdev = series["Dfcomb"], series["Dfcomb_std"]
+            fault.depth_best = series["Depth_Dfc"] * 0.66
 
         return fault
 
