@@ -9,10 +9,11 @@ import numpy as np
 from shapely.geometry import LineString, Polygon, MultiPolygon, MultiLineString
 from shapely.ops import unary_union
 from pyproj import Transformer
-#import warnings
+# import warnings
 
 import logging
-#from src.eq_fault_geom.geomio.cfm_logger import CfmLogger
+
+# from src.eq_fault_geom.geomio.cfm_logger import CfmLogger
 
 transformer = Transformer.from_crs(2193, 4326, always_xy=True)
 transform_wgs2nztm = Transformer.from_crs(4326, 2193, always_xy=True)
@@ -27,6 +28,44 @@ possible_rake_dirs = ['dextral', 'normal', 'reverse', 'sinistral', 'dextral and 
 
 # List of subduction zones to exclude if desired
 subduction_names = ("hikurangi", "puysegur")
+
+domain_names = ['Alpine Fault', 'Marlborough Fault System', 'Central Canterbury',
+                'Northwestern South Island', 'Northeastern Canterbury', 'Otago',
+                'Southern South Island', 'North Waikato - South Auckland',
+                'Havre Trough - Taupo Rift', 'North Island Dextral Fault Belt',
+                'Kapiti-Manawatu', 'Fiordland block', 'Southern Alps',
+                'Hikurangi accretionary margin', 'East Cape block',
+                'western North Island', 'North Mernoo fracture zone',
+                'Puysegur-Caswell High outer rise',
+                'Western Fiordland Margin - Caswell High', 'Puysegur Ridge - Bank',
+                'Puysegur subduction front',
+                'Hikurangi accretionary margin - eastern zone',
+                'Hikurangi outer rise', 'Hikurangi subduction front']
+
+dom_dict = {26: 'Puysegur subduction front',
+            10: 'Hikurangi subduction front',
+            20: 'Otago',
+            6: 'East Cape block',
+            2: 'North Waikato - South Auckland',
+            21: 'Southern South Island',
+            25: 'Puysegur Ridge - Bank',
+            9: 'Hikurangi outer rise',
+            14: 'Marlborough Fault System',
+            12: 'Kapiti-Manawatu',
+            7: 'Hikurangi accretionary margin',
+            19: 'Southern Alps',
+            23: 'Fiordland block',
+            15: 'Alpine Fault',
+            18: 'Central Canterbury',
+            13: 'Northwestern South Island',
+            4: 'Havre Trough - Taupo Rift',
+            17: 'Northeastern Canterbury',
+            24: 'Western Fiordland Margin - Caswell High',
+            3: 'western North Island',
+            16: 'North Mernoo fracture zone',
+            27: 'Puysegur-Caswell High outer rise',
+            5: 'North Island Dextral Fault Belt',
+            8: 'Hikurangi accretionary margin - eastern zone'}
 
 valid_dip_range = [0, 90]
 valid_depth_range = [0, 50]
@@ -187,7 +226,7 @@ def calculate_dip_direction(line: LineString):
         # Gradient to bearing
         bearing = 180 - np.degrees(np.arctan2(gradient_x, 1))
     else:
-        bearing = 180 - np.degrees(np.arctan2(1/gradient_y, 1))
+        bearing = 180 - np.degrees(np.arctan2(1 / gradient_y, 1))
     bearing_vector = np.array([np.sin(np.radians(bearing)), np.cos(np.radians(bearing))])
 
     # Determine whether line object fits strike convention
@@ -238,7 +277,7 @@ def fault_trace_xml(geometry: LineString, section_name: str, z: Union[float, int
     x, y = geometry.xy
     # Loop through addis each coordinate as sub element
     for x_i, y_i in zip(x, y):
-        if x_i <=0.:
+        if x_i <= 0.:
             x_i += 360.
         loc_element = ElemTree.Element("Location", attrib={"Latitude": ll_float_str.format(y_i),
                                                            "Longitude": ll_float_str.format(x_i),
@@ -302,7 +341,6 @@ class CfmMultiFault:
                     # Assume NZTM, do nothing
                     exclude_regions_nztm.append(poly)
 
-
             # Make list of faults outside region
             trimmed_fault_ls = []
             for i, row in fault_geodataframe.iterrows():
@@ -333,7 +371,6 @@ class CfmMultiFault:
         if exclude_aus:
             trimmed_fault_gdf = trimmed_fault_gdf[trimmed_fault_gdf.Fault_stat != "A-US"]
 
-
         if sort_sr:
             sorted_df = trimmed_fault_gdf.sort_values("SR_pref", ascending=False)
         else:
@@ -346,8 +383,6 @@ class CfmMultiFault:
 
         self.df = sorted_df
 
-
-
     def check_input1(self, fault_geodataframe):
         for field in required_fields:
             if field not in fault_geodataframe.columns:
@@ -358,7 +393,6 @@ class CfmMultiFault:
             if field not in fault_geodataframe.columns:
                 print("Warning: missing expected field: ({})".format(field))
                 self.logger.warning("missing expected field")
-
 
     @property
     def faults(self):
@@ -415,7 +449,7 @@ class CfmMultiFault:
                 i += 1
 
         # Awkward way of getting the xml file to be written in a way that's easy to read.
-        #elmstr = ElemTree.tostring(opensha_element, encoding="UTF-8", xml_declaration=True)
+        # elmstr = ElemTree.tostring(opensha_element, encoding="UTF-8", xml_declaration=True)
         elmstr = ElemTree.tostring(opensha_element, encoding="UTF-8")
         xml_dom = minidom.parseString(elmstr)
         pretty_xml_str = xml_dom.toprettyxml(indent="  ", encoding="utf-8")
@@ -474,6 +508,7 @@ class CfmMultiFault:
         with open(output_csv, "w") as out_file:
             out_file.write(out_str)
 
+
 class CfmFault:
     def __init__(self, parent_multifault: CfmMultiFault = None):
         """
@@ -492,11 +527,12 @@ class CfmFault:
         self._source1_1, self.source2 = (None,) * 2
         self._sr_best, self._sr_max, self._sr_min = (None,) * 3
         self._nztm_trace = None
+        self._dom_num = None
+        self._dom_name = None
 
         # Attributes required for OpenSHA XML
         self._section_id, self._section_name = (None,) * 2
         self._dip_sigma, self._rake_sigma, self._sr_sigma = (None,) * 3
-
 
     # Depths
     @property
@@ -608,7 +644,7 @@ class CfmFault:
         dip_v = self.validate_dip(dip)
         for key, dip_value in zip(["dip_max", "dip_best"], [self.dip_max, self.dip_best]):
             if dip_value is not None and bearing_geq(dip_v, dip_value):
-                #print("{}: dip_min ({:.2f}) is higher than {} ({:.2f})".format(self.name, dip_v, key, dip_value)) #{:.2f} formatting is not working
+                # print("{}: dip_min ({:.2f}) is higher than {} ({:.2f})".format(self.name, dip_v, key, dip_value)) #{:.2f} formatting is not working
                 print("{}: dip_min ({}) is higher than {} ({})".format(self.name, dip_v, key, dip_value))
                 self.logger.warning("dip_min is higher than dip max or dip best")
 
@@ -621,7 +657,8 @@ class CfmFault:
         elif not any([a is None for a in (self.dip_min, self.dip_max)]):
             return root_mean_square(np.array([self.dip_min, self.dip_max]))
         else:
-            raise ValueError("Insufficient data to calculate dip_sigma!")   # <= not sure if you need this step as this will go through validate_dip
+            raise ValueError(
+                "Insufficient data to calculate dip_sigma!")  # <= not sure if you need this step as this will go through validate_dip
 
     @dip_dir_str.setter
     def dip_dir_str(self, dip_dir: str):
@@ -723,7 +760,7 @@ class CfmFault:
         else:
             z = np.sin(np.radians(self.dip_best))
             x, y = np.cos(np.radians(self.dip_best)) * np.array([np.sin(np.radians(self.dip_dir)),
-                                                                np.cos(np.radians(self.dip_dir))])
+                                                                 np.cos(np.radians(self.dip_dir))])
         return np.array([x, y, -z])
 
     @property
@@ -813,19 +850,18 @@ class CfmFault:
         rake_v = self.validate_rake(rake)
         if self.rake_min is not None:
             if rake_v < self.rake_min:
-                #print("{}: rake_best ({.2f}) lower than rake_min ({.2f})".format(self.name, rake_v, self.rake_min))
+                # print("{}: rake_best ({.2f}) lower than rake_min ({.2f})".format(self.name, rake_v, self.rake_min))
                 print("{}: rake_best ({}) lower than rake_min ({})".format(self.name, rake_v, self.rake_min))
                 self.logger.warning("rake_best is lower than rake_min")
         if self.rake_max is not None:
             if rake_v > self.rake_max:
-                #print("{}: rake_best ({.2f}) greater than rake_max ({.2f})".format(self.name, rake_v, self.rake_max))
+                # print("{}: rake_best ({.2f}) greater than rake_max ({.2f})".format(self.name, rake_v, self.rake_max))
                 print("{}: rake_best ({}) greater than rake_max ({})".format(self.name, rake_v, self.rake_max))
                 self.logger.warning("rake_best is greater than rake_max")
         self._rake_best = rake_v
 
         if self.sense_dom is not None:
             self.validate_rake_sense()
-
 
     @staticmethod
     def rake_to_opensha(rake: Union[float, int]):
@@ -853,7 +889,7 @@ class CfmFault:
         rake_v = self.validate_rake(rake)
         for key, rake_value in zip(["rake_max", "rake_best"], [self.rake_max, self.rake_best]):
             if rake_value is not None and bearing_geq(rake_v, rake_value):
-                #print("{}: rake_min ({:.2f}) is higher than {} ({:.2f})".format(self.name, rake_v, key, rake_value))
+                # print("{}: rake_min ({:.2f}) is higher than {} ({:.2f})".format(self.name, rake_v, key, rake_value))
                 print("{}: rake_min ({}) is higher than {} ({})".format(self.name, rake_v, key, rake_value))
                 self.logger.warning("rake_min is higher than rake max or rake best")
         self._rake_min = rake_v
@@ -989,6 +1025,28 @@ class CfmFault:
                 print("Duplicate fault number: {:d}".format(fault_number))
 
     @property
+    def dom_name(self):
+        return self._dom_name
+
+    @dom_name.setter
+    def dom_name(self, name):
+        assert name in domain_names
+        if self.dom_num is not None:
+            assert dom_dict[self.dom_num] == name
+
+        self._dom_name = name
+
+    @property
+    def dom_num(self):
+        return self._dom_num
+
+    @dom_num.setter
+    def dom_num(self, num: int):
+        assert isinstance(num, int)
+        assert num in dom_dict.keys()
+        self._dom_num = num
+
+    @property
     def parent(self):
         return self._parent
 
@@ -996,7 +1054,7 @@ class CfmFault:
     def from_series(cls, series: pd.Series, parent_multifault: CfmMultiFault = None, depth_type: str = "D90",
                     remove_colons: bool = False):
         assert isinstance(series, pd.Series)
-        assert depth_type in ["D90", "Dfc80", "Dfc66"]
+        assert depth_type in ["D90", "Dfc80", "Dfc66", "Dfc"]
         fault = cls(parent_multifault=parent_multifault)
         fault.name = series["Name"]
         if remove_colons:
@@ -1012,8 +1070,13 @@ class CfmFault:
             fault.depth_best = series["Depth_D90"]
         elif depth_type == "Dfc80":
             fault.depth_best = series["Depth_Dfc"] * 0.8
+        elif depth_type == "Dfc66":
+            fault.depth_best = series["Depth_Dfc"] * 0.666
         else:
-            fault.depth_best = series["Depth_Dfc"] * 0.66
+            fault.depth_best = series["Depth_Dfc"]
+
+        fault.dom_num = series["Domain_No"]
+        fault.dom_name = series["DomainName"]
 
         return fault
 
@@ -1049,7 +1112,9 @@ class CfmFault:
                          "couplingCoeff": "1.0",
                          "dipDirection": "{:.1f}".format(self.dip_dir),
                          "parentSectionId": "-1",
-                         "connector": "false"
+                         "connector": "false",
+                         "domainNo": f"{self.dom_num:d}",
+                         "domainName": f"{self.dom_name}"
                          }
 
         # Initialize XML element
@@ -1074,7 +1139,7 @@ class CfmFault:
     @staticmethod
     def pad_commas(in_string: str, num_columns: int):
         num_commas = in_string.count(",")
-        out_str = in_string.strip() + (num_columns - num_commas -1) * "," + "\n"
+        out_str = in_string.strip() + (num_columns - num_commas - 1) * "," + "\n"
         return out_str
 
     def to_segment(self, x0: float, y0: float, x1: float, y1: float, num_columns: int):
@@ -1111,8 +1176,3 @@ class CfmFault:
                     f"{self.sr_max:.2f}\n")
         data_str += self.trace_to_hybrid_csv(num_columns=num_columns)
         return data_str
-
-
-
-
-
