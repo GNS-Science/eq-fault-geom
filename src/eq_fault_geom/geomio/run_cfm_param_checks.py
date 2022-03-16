@@ -5,7 +5,7 @@ from shapely.geometry import Polygon
 from eq_fault_geom.geomio.cfm_faults import CfmMultiFault
 from eq_fault_geom.geomio.shapefile_operations import geopandas_polygon_to_gmt
 
-shp = "../../../data/cfm_shapefile/cfm_0_9.gpkg"
+shp = "../../../data/cfm_shapefile/cfm1_0.gpkg"
 # shp = "../../../data/cfm_shapefile/cfm_0_9_stirling_depths.gpkg"
 
 # Polygons to exclude faults from XML
@@ -30,24 +30,24 @@ matt_gs.to_file("matt_poly.shp")
 buffer_width = 5000.
 
 # Read and write data
-data_d90_all = CfmMultiFault.from_shp(shp, depth_type="D90")
-data_d90_notvz = CfmMultiFault.from_shp(shp, exclude_region_polygons=poly_ls,
-                                        exclude_region_min_sr=1.8, depth_type="D90")
+data_all = CfmMultiFault.from_shp(shp, depth_type=f"Dfc")
+data_notvz = CfmMultiFault.from_shp(shp, exclude_region_polygons=poly_ls,
+                                        exclude_region_min_sr=1.8, depth_type=f"Dfc")
 
 
 # Fault polygons for any non-horizontal faults
-polygons = [fault.combined_buffer_polygon(buffer_width) for fault in data_d90_notvz.faults if abs(fault.down_dip_vector[-1]) > 1.e-3]
+# polygons = [fault.combined_buffer_polygon(buffer_width) for fault in data_d90_notvz.faults if abs(fault.down_dip_vector[-1]) > 1.e-3]
 # Write out polygons
-polygons_gdf = gpd.GeoDataFrame(geometry=polygons, crs=4326)
-polygons_gdf.to_file("fault_buffers.shp")
+# polygons_gdf = gpd.GeoDataFrame(geometry=polygons, crs=4326)
+# polygons_gdf.to_file("fault_buffers.shp")
 # Write out for plotting in matlab
-geopandas_polygon_to_gmt(polygons_gdf, "fault_polygons_notvz.txt", matlab=True)
+# geopandas_polygon_to_gmt(polygons_gdf, "fault_polygons_notvz.txt", matlab=True)
 
 # Write out XML files
-for file_handle, dataset in zip(["d90_all", "d90_no_tvz"],
-                               [data_d90_all, data_d90_notvz]):
+for file_handle, dataset in zip(["all", "no_tvz"],
+                               [data_all, data_notvz]):
     xml_buffer = dataset.to_opensha_xml(exclude_subduction=True, buffer_width=buffer_width, write_buffers=False)
-    with open("cfm_0_9_{}.xml".format(file_handle), "wb") as f:
+    with open(f"cfm_1_0_domain_{file_handle}.xml", "wb") as f:
         f.write(xml_buffer)
     # with open("cfm_0_9_{}_stirling_depths.xml".format(file_handle), "wb") as f:
     #     f.write(xml_buffer)
