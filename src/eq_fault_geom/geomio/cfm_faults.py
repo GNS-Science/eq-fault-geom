@@ -29,19 +29,6 @@ possible_rake_dirs = ['dextral', 'normal', 'reverse', 'sinistral', 'dextral and 
 # List of subduction zones to exclude if desired
 subduction_names = ("hikurangi", "puysegur")
 
-domain_names = ['Alpine Fault', 'Marlborough Fault System', 'Central Canterbury',
-                'Northwestern South Island', 'Northeastern Canterbury', 'Otago',
-                'Southern South Island', 'North Waikato - South Auckland',
-                'Havre Trough - Taupo Rift', 'North Island Dextral Fault Belt',
-                'Kapiti-Manawatu', 'Fiordland block', 'Southern Alps',
-                'Hikurangi accretionary margin', 'East Cape block',
-                'western North Island', 'North Mernoo fracture zone',
-                'Puysegur-Caswell High outer rise',
-                'Western Fiordland Margin - Caswell High', 'Puysegur Ridge - Bank',
-                'Puysegur subduction front',
-                'Hikurangi accretionary margin - eastern zone',
-                'Hikurangi outer rise', 'Hikurangi subduction front']
-
 dom_dict = {26: 'Puysegur subduction front',
             10: 'Hikurangi subduction front',
             20: 'Otago',
@@ -1030,7 +1017,7 @@ class CfmFault:
 
     @dom_name.setter
     def dom_name(self, name):
-        assert name in domain_names
+        assert name in dom_dict.values()
         if self.dom_num is not None:
             assert dom_dict[self.dom_num] == name
 
